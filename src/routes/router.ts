@@ -14,13 +14,13 @@ const routes = [
 })
 
 // Handle GitHub Pages 404 redirect
-// The 404.html page redirects to /?/path, so we need to extract the path
+// The 404.html page stores the route in sessionStorage
 if (typeof window !== 'undefined') {
-  const search = window.location.search;
-  if (search && search.startsWith('?/')) {
-    const path = search.slice(1).split('&')[0].replace(/~and~/g, '&');
-    if (path && path !== '/') {
-      router.replace(path);
+  const redirectPath = sessionStorage.getItem('404-redirect');
+  if (redirectPath) {
+    sessionStorage.removeItem('404-redirect');
+    if (redirectPath !== '/') {
+      router.replace(redirectPath);
     }
   }
 }

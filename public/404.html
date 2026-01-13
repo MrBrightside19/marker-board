@@ -6,19 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Score Board</title>
     <script>
-      // Single Page Apps for GitHub Pages
-      // https://github.com/rafgraph/spa-github-pages
-      (function() {
-        var pathSegmentsToKeep = 1; // Number of path segments to keep (marker-board)
-        var l = window.location;
-        l.replace(
-          l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-          l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-          l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-          l.hash
-        );
-      })();
+      // Store the current pathname in sessionStorage
+      var path = window.location.pathname;
+      var route = path.replace('/marker-board', '') || '/';
+      sessionStorage.setItem('404-redirect', route);
+      // Redirect to index.html
+      window.location.replace('/marker-board/');
     </script>
   </head>
   <body>
@@ -26,4 +19,3 @@
     <script type="module" src="/marker-board/src/main.ts"></script>
   </body>
 </html>
-
