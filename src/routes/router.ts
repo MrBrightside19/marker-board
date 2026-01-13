@@ -12,4 +12,17 @@ const routes = [
   history: createWebHistory('/marker-board/'),
   routes,
 })
+
+// Handle GitHub Pages 404 redirect
+// The 404.html page redirects to /?/path, so we need to extract the path
+if (typeof window !== 'undefined') {
+  const search = window.location.search;
+  if (search && search.startsWith('?/')) {
+    const path = search.slice(1).split('&')[0].replace(/~and~/g, '&');
+    if (path && path !== '/') {
+      router.replace(path);
+    }
+  }
+}
+
  export default router
