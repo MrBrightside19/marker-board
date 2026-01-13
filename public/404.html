@@ -6,20 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Score Board</title>
     <script>
-      // Store the current pathname in sessionStorage
-      var path = window.location.pathname;
-      // Extract the route after /marker-board
-      var basePath = '/marker-board';
-      var route = path.startsWith(basePath) 
-        ? path.substring(basePath.length) || '/' 
-        : path || '/';
-      // Ensure route starts with /
-      if (!route.startsWith('/')) {
-        route = '/' + route;
-      }
-      sessionStorage.setItem('404-redirect', route);
-      // Redirect to index.html
-      window.location.replace('/marker-board/');
+      // Store the current pathname in sessionStorage before redirecting
+      (function() {
+        var path = window.location.pathname;
+        var basePath = '/marker-board';
+        var route = '/';
+        
+        if (path.startsWith(basePath)) {
+          route = path.substring(basePath.length) || '/';
+        } else if (path !== '/') {
+          route = path;
+        }
+        
+        // Ensure route starts with /
+        if (!route.startsWith('/')) {
+          route = '/' + route;
+        }
+        
+        // Store the route to redirect to
+        if (route !== '/') {
+          sessionStorage.setItem('404-redirect', route);
+        }
+        
+        // Redirect to index.html
+        window.location.replace('/marker-board/');
+      })();
     </script>
   </head>
   <body>

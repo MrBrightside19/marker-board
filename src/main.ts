@@ -16,9 +16,15 @@ router.isReady().then(() => {
   const redirectPath = sessionStorage.getItem('404-redirect');
   if (redirectPath) {
     sessionStorage.removeItem('404-redirect');
-    if (redirectPath !== '/') {
-      router.replace(redirectPath);
-    }
+    // Small delay to ensure app is fully mounted
+    setTimeout(() => {
+      if (redirectPath !== '/') {
+        router.replace(redirectPath).catch(() => {
+          // If route doesn't exist, ignore the error
+          console.log('Route not found:', redirectPath);
+        });
+      }
+    }, 100);
   }
 });
 

@@ -27,6 +27,12 @@
   </a-flex> -->
 
   <div class="scoreboard-container font-digital">
+    <router-link to="/controls" class="nav-button">
+      <a-button type="primary" size="large" style="position: absolute; top: 20px; right: 20px; z-index: 1000;">
+        Controles
+      </a-button>
+    </router-link>
+    
     <div class="team-score local-team">
       <div class="team-name">{{ localTeam }}</div>
       <div class="score">{{ goalLocal }}</div>

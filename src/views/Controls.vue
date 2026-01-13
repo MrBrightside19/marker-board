@@ -1,6 +1,12 @@
 <template>
 
   <div class="controls">
+    <router-link to="/" class="nav-button">
+      <a-button type="default" size="large" style="position: absolute; top: 20px; left: 20px; z-index: 1000;">
+        ← Volver al Marcador
+      </a-button>
+    </router-link>
+    
     <a-flex class="separator" justify="space-between" align="center">
       <span style="margin: 10px">
         <h1>
