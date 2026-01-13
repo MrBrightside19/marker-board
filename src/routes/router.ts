@@ -9,7 +9,7 @@ const routes = [
 ]
 
  const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/marker-board/'),
   routes,
 })
  export default router
