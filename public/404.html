@@ -8,7 +8,15 @@
     <script>
       // Store the current pathname in sessionStorage
       var path = window.location.pathname;
-      var route = path.replace('/marker-board', '') || '/';
+      // Extract the route after /marker-board
+      var basePath = '/marker-board';
+      var route = path.startsWith(basePath) 
+        ? path.substring(basePath.length) || '/' 
+        : path || '/';
+      // Ensure route starts with /
+      if (!route.startsWith('/')) {
+        route = '/' + route;
+      }
       sessionStorage.setItem('404-redirect', route);
       // Redirect to index.html
       window.location.replace('/marker-board/');

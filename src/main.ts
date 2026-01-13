@@ -10,5 +10,17 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
+
+// Handle GitHub Pages 404 redirect after app is mounted
+router.isReady().then(() => {
+  const redirectPath = sessionStorage.getItem('404-redirect');
+  if (redirectPath) {
+    sessionStorage.removeItem('404-redirect');
+    if (redirectPath !== '/') {
+      router.replace(redirectPath);
+    }
+  }
+});
+
 app.mount('#app')
 
