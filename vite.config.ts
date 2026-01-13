@@ -15,7 +15,7 @@ export default defineConfig({
       ],
     }),
   ],
-  base: '/marcador-hockey/',
+  base: '/marker-board/',
   // build: {
   //   rollupOptions: {
   //     output: {
