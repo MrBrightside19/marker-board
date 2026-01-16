@@ -1,40 +1,78 @@
 <template>
-
   <div class="controls">
     <router-link to="/" class="nav-button">
-      <a-button type="default" size="large" style="position: absolute; top: 20px; left: 20px; z-index: 1000;">
+      <a-button
+        type="default"
+        size="large"
+        style="position: absolute; top: 20px; left: 20px; z-index: 1000"
+      >
         ← Volver al Marcador
       </a-button>
     </router-link>
-    
+
     <a-flex class="separator" justify="space-between" align="center">
       <span style="margin: 10px">
         <h1>
           Local
 
-          <a-input style="width: 220px" v-model:value="local" size="large" placeholder="Nombre equipo local" />
+          <a-input
+            style="width: 220px"
+            v-model:value="local"
+            size="large"
+            placeholder="Nombre equipo local"
+          />
 
           Marcador: {{ localGoals }}
         </h1>
 
-        <a-button class="control-button" size="large" type="primary" @click="changeGoalLocal(+1)">Sumar Gol
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          @click="changeGoalLocal(+1)"
+          >Sumar Gol
         </a-button>
-        <a-button class="control-button" size="large" type="primary" @click="changeGoalLocal(-1)">Restar Gol
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          @click="changeGoalLocal(-1)"
+          >Restar Gol
         </a-button>
       </span>
-      <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" />
+      <a-divider
+        type="vertical"
+        style="height: 300px; background-color: black; width: 10px; top: 0"
+      />
 
       <div>
         <h1>
           Visita
 
-          <a-input style="width: 220px" v-model:value="visit" size="large" placeholder="Nombre equipo visita" />
+          <a-input
+            style="width: 220px"
+            v-model:value="visit"
+            size="large"
+            placeholder="Nombre equipo visita"
+          />
           Marcador: {{ visitGoals }}
         </h1>
-        <a-button class="control-button" size="large" type="primary" danger @click="changeGoalVisit(+1)">
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          danger
+          @click="changeGoalVisit(+1)"
+        >
           Sumar Gol
         </a-button>
-        <a-button class="control-button" size="large" type="primary" danger @click="changeGoalVisit(-1)">
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          danger
+          @click="changeGoalVisit(-1)"
+        >
           Restar Gol
         </a-button>
       </div>
@@ -49,16 +87,35 @@
       <!-- <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" /> -->
 
       <div style="text-align: center">
-        <a-select class="time-select" size="large" ref="select" v-model:value="selectedTime" style="width: 220px"
-          :options="optionsTime"></a-select>
+        <a-select
+          class="time-select"
+          size="large"
+          ref="select"
+          v-model:value="selectedTime"
+          style="width: 220px"
+          :options="optionsTime"
+        ></a-select>
         <a-button class="control-button-2" size="large" @click="resetTime">
-          Resetear tiempo</a-button>
+          Resetear tiempo</a-button
+        >
         <h1 style="margin-top: 10px; font-size: 40px">{{ formattedTime }}</h1>
       </div>
 
-      <a-button :danger="!isPaused" type="primary"
-        style="min-width: 150px; height: 80px; font-size: 28px; align-self: center; margin-right: 100px;" size="large" @click="togglePause">
-        {{ isPaused ? "Continuar" : "Pausar" }}</a-button>
+      <a-button
+        :danger="!isPaused"
+        type="primary"
+        style="
+          min-width: 150px;
+          height: 80px;
+          font-size: 28px;
+          align-self: center;
+          margin-right: 100px;
+        "
+        size="large"
+        @click="togglePause"
+      >
+        {{ isPaused ? "Continuar" : "Pausar" }}</a-button
+      >
 
       <!-- <div style="text-align: center">
         <a-select size="large" class="time-select" ref="select" v-model:value="selectedPenalty" style="width: 220px"
@@ -77,8 +134,8 @@ import { ref, onMounted, onUnmounted, watch } from "vue";
 const local = ref(localStorage.getItem("local-team") || "");
 const visit = ref(localStorage.getItem("visit-team") || "");
 const selectedTime = ref("20:00");
-const selectedPenalty = ref("2:00");
-const gamePeriod = ref(localStorage.getItem("game-period") || "1");
+// const selectedPenalty = ref("2:00");
+  // const gamePeriod = ref(localStorage.getItem("game-period") || "1");
 const localGoals = ref(localStorage.getItem("goal-local") || "0");
 const visitGoals = ref(localStorage.getItem("goal-visit") || "0");
 
@@ -90,12 +147,12 @@ const optionsTime = [
   { value: "5:00", label: "5 minutos" },
   // { value: "10:00", label: "10 minutos" },
 ];
-const optionsPenalty = [
-  { value: "2:00", label: "2 minutos" },
-  { value: "4:00", label: "4 minutos" },
-  { value: "5:00", label: "5 minutos" },
-  { value: "10:00", label: "10 minutos" },
-];
+// const optionsPenalty = [
+//   { value: "2:00", label: "2 minutos" },
+//   { value: "4:00", label: "4 minutos" },
+//   { value: "5:00", label: "5 minutos" },
+//   { value: "10:00", label: "10 minutos" },
+// ];
 
 // Estado de pausa
 const isPaused = ref(localStorage.getItem("isPaused") === "true");
@@ -125,14 +182,14 @@ const changeGoalVisit = (value: number) => {
   }
   visitGoals.value = localStorage.getItem("goal-visit") || "0";
 };
-const changePeriod = () => {
-  const currentValue = Number(localStorage.getItem("game-period") || 1);
-  localStorage.setItem("game-period", (currentValue + 1).toString());
-  if (currentValue + 1 > 4) {
-    localStorage.setItem("game-period", (1).toString());
-  }
-  gamePeriod.value = localStorage.getItem("game-period") || "1";
-};
+  // const changePeriod = () => {
+  //   const currentValue = Number(localStorage.getItem("game-period") || 1);
+  //   localStorage.setItem("game-period", (currentValue + 1).toString());
+  //   if (currentValue + 1 > 4) {
+  //     localStorage.setItem("game-period", (1).toString());
+  //   }
+  //   gamePeriod.value = localStorage.getItem("game-period") || "1";
+  // };
 
 // 🔄 Reiniciar el tiempo en localStorage y notificar a `/home`
 const resetTime = () => {
@@ -145,16 +202,16 @@ const resetTime = () => {
     window.dispatchEvent(new Event("storage")); // Forzar actualización en todas las ventanas
   }
 };
-const resetPenalty = () => {
-  const confirmReset = window.confirm(
-    "¿Estás seguro de que deseas resetear el tiempo de penalidad?"
-  );
-  if (confirmReset) {
-    localStorage.setItem("penalty-game", selectedPenalty.value);
-    formattedPenalty.value = selectedPenalty.value;
-    window.dispatchEvent(new Event("storage")); // Forzar actualización en todas las ventanas
-  }
-};
+// const resetPenalty = () => {
+//   const confirmReset = window.confirm(
+//     "¿Estás seguro de que deseas resetear el tiempo de penalidad?"
+//   );
+//   if (confirmReset) {
+//     // localStorage.setItem("penalty-game", selectedPenalty.value);
+//     // formattedPenalty.value = selectedPenalty.value;
+//     window.dispatchEvent(new Event("storage")); // Forzar actualización en todas las ventanas
+//   }
+// };
 
 const updateLocalTeam = () => {
   localStorage.setItem("local-team", local.value);
@@ -166,7 +223,7 @@ const updateVisitlTeam = () => {
 };
 
 const formattedTime = ref(localStorage.getItem("time-game") || "20:00");
-const formattedPenalty = ref(localStorage.getItem("penalty-game") || "02:00");
+// const formattedPenalty = ref(localStorage.getItem("penalty-game") || "02:00");
 
 const storedLocal = ref(local.value);
 const storedVisit = ref(visit.value);
@@ -175,9 +232,9 @@ const syncWithStorage = (event: StorageEvent) => {
   if (event.key === "time-game") {
     formattedTime.value = localStorage.getItem("time-game") || "20:00";
   }
-  if (event.key === "penalty-game") {
-    formattedPenalty.value = localStorage.getItem("penalty-game") || "02:00";
-  }
+  // if (event.key === "penalty-game") {
+  //   formattedPenalty.value = localStorage.getItem("penalty-game") || "02:00";
+  // }
   if (event.key === "local-team") {
     storedLocal.value = localStorage.getItem("local-team") || "";
     local.value = storedLocal.value;
@@ -203,5 +260,4 @@ onUnmounted(() => {
 });
 watch(local, updateLocalTeam);
 watch(visit, updateVisitlTeam);
-
 </script>

@@ -53,7 +53,7 @@ const localTeam = ref(localStorage.getItem("local-team") || "Equipo Local");
 const visitTeam = ref(localStorage.getItem("visit-team") || "Equipo Visita");
 const goalLocal = ref<number>(Number(localStorage.getItem("goal-local") || 0));
 const goalVisit = ref<number>(Number(localStorage.getItem("goal-visit") || 0));
-const gamePeriod = ref<number>(Number(localStorage.getItem("game-period") || 1));
+// const gamePeriod = ref<number>(Number(localStorage.getItem("game-period") || 1));
 
 const updateGoalLocal = () => {
   goalLocal.value = Number(localStorage.getItem("goal-local") || 0);
@@ -61,9 +61,9 @@ const updateGoalLocal = () => {
 const updateGoalVisit = () => {
   goalVisit.value = Number(localStorage.getItem("goal-visit") || 0);
 };
-const updateGamePeriod = () => {
-  gamePeriod.value = Number(localStorage.getItem("game-period") || 1);
-};
+// const updateGamePeriod = () => {
+//   gamePeriod.value = Number(localStorage.getItem("game-period") || 1);
+// };
 
 const timeString = ref<string>(localStorage.getItem("time-game") || "20:00");
 const timeMilliseconds = ref<number>(convertToMilliseconds(timeString.value));
@@ -142,13 +142,13 @@ onMounted(() => {
 
   window.addEventListener("storage", updateGoalLocal);
   window.addEventListener("storage", updateGoalVisit);
-  window.addEventListener("storage", updateGamePeriod);
+  // window.addEventListener("storage", updateGamePeriod);
   startTimer();
   startPenalty();
   window.addEventListener("storage", syncWithStorage); // Escucha cambios en localStorage
   updateGoalLocal(); // Actualiza el valor inicial al montar la vista
   updateGoalVisit();
-  updateGamePeriod();
+  // updateGamePeriod();
 });
 
 onUnmounted(() => {
@@ -157,7 +157,7 @@ onUnmounted(() => {
   window.removeEventListener("storage", syncWithStorage);
   window.removeEventListener("storage", updateGoalLocal);
   window.removeEventListener("storage", updateGoalVisit);
-  window.removeEventListener("storage", updateGamePeriod);
+  // window.removeEventListener("storage", updateGamePeriod);
 });
 
 // 📌 Convertir "mm:ss" a milisegundos
@@ -175,15 +175,15 @@ function formatTime(ms: number): string {
 
 // 📌 Formato del tiempo a mostrar en pantalla
 const formattedTime = ref(formatTime(timeMilliseconds.value));
-const formattedPenalty = ref(formatTime(penaltyMilliseconds.value));
+// const formattedPenalty = ref(formatTime(penaltyMilliseconds.value));
 
 watch(timeMilliseconds, (newVal) => {
   formattedTime.value = formatTime(newVal);
 });
 
-watch(penaltyMilliseconds, (newVal) => {
-  formattedPenalty.value = formatTime(newVal);
-});
+// watch(penaltyMilliseconds, (newVal) => {
+//   formattedPenalty.value = formatTime(newVal);
+// });
 </script>
 
 <style scoped lang="scss">
