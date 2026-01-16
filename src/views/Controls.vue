@@ -194,6 +194,7 @@ const syncWithStorage = (event: StorageEvent) => {
 
 // 🎯 Detectar cambios en `localStorage`
 onMounted(() => {
+  document.title = "Controles";
   window.addEventListener("storage", syncWithStorage);
 });
 

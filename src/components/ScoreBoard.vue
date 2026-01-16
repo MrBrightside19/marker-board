@@ -138,6 +138,8 @@ const syncWithStorage = (event: StorageEvent) => {
 };
 
 onMounted(() => {
+  document.title = "Marcador";
+
   window.addEventListener("storage", updateGoalLocal);
   window.addEventListener("storage", updateGoalVisit);
   window.addEventListener("storage", updateGamePeriod);
