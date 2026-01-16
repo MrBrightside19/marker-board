@@ -1,7 +1,8 @@
 import { createApp } from 'vue'
-import './style.css'
 import App from './App.vue'
-import 'ant-design-vue/dist/reset.css';
+// Importar estilos en el orden correcto: primero reset de Ant Design, luego nuestros estilos
+import 'ant-design-vue/dist/reset.css'
+import './style.css'
 import './assets/scss/main.scss'
 import router from './routes/router'
 import { createPinia } from 'pinia'

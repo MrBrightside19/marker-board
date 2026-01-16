@@ -10,19 +10,26 @@ export default defineConfig({
     Components({
       resolvers: [
         AntDesignVueResolver({
-          importStyle: false, // css in js
+          importStyle: false, // css in js - required for ant-design-vue 4.x
         }),
       ],
     }),
   ],
   base: '/marker-board/',
-  // build: {
-  //   rollupOptions: {
-  //     output: {
-  //       manualChunks: {
-  //         'ant-design-vue': ['ant-design-vue'],
-  //       },
-  //     },
-  //   },
-  // },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Asegurar que SCSS se compile correctamente
+        api: 'modern-compiler',
+      },
+    },
+  },
+  build: {
+    cssCodeSplit: false, // Mantener todos los estilos en un solo archivo para evitar problemas de orden
+    rollupOptions: {
+      output: {
+        // No dividir chunks para asegurar que los estilos se carguen correctamente
+      },
+    },
+  },
 });
