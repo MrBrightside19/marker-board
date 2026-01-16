@@ -35,6 +35,7 @@ export default defineConfig({
   },
   define: {
     // Asegurar que NODE_ENV esté definido correctamente para Ant Design Vue
+    // Vite ya maneja NODE_ENV automáticamente, pero lo definimos explícitamente para Ant Design Vue
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
   },
 });
