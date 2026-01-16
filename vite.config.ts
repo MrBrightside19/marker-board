@@ -26,10 +26,15 @@ export default defineConfig({
   },
   build: {
     cssCodeSplit: false, // Mantener todos los estilos en un solo archivo para evitar problemas de orden
+    minify: 'esbuild', // Usar esbuild para minificación más rápida y confiable
     rollupOptions: {
       output: {
         // No dividir chunks para asegurar que los estilos se carguen correctamente
       },
     },
+  },
+  define: {
+    // Asegurar que NODE_ENV esté definido correctamente para Ant Design Vue
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
   },
 });
