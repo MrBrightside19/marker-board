@@ -1,37 +1,9 @@
 <template>
-  <!-- <a-flex class="font-digital" justify="space-between" align="center">
-    <div style="text-align: center; margin: 120px 0 0 80px; min-width: 400px">
-      <div style="font-size: 120px; margin: 0;">{{ localTeam }}</div>
-      <div style="font-size: 400px; margin: 0">{{ goalLocal }}</div>
-    </div>
-
-    <div style="text-align: center">
-      <div style="font-size: 380px; margin-bottom: 0">
-        {{ formattedTime }}
-      </div>
-
-      <div style="text-align: center">
-        <div style="margin: 0; font-size: 100px">Periodo</div>
-        <div style="margin-bottom: 5px; font-size: 200px">{{ gamePeriod }}</div>
-      </div>
-
-      <div style="text-align: center">
-        <div style="margin: 0; font-size: 100px; height: 80px">Penalidad</div>
-        <div style="margin: 0; font-size: 200px">{{ formattedPenalty }}</div>
-      </div>
-    </div>
-    <div style="text-align: center; margin: 120px 80px 0 0; min-width: 400px">
-      <div style="font-size: 120px; margin: 0">{{ visitTeam }}</div>
-      <div style="font-size: 400px; margin: 0">{{ goalVisit }}</div>
-    </div>
-  </a-flex> -->
 
   <div class="scoreboard-container font-digital">
-    <router-link to="/controls" class="nav-button">
-      <a-button type="primary" size="large" style="position: absolute; top: 20px; right: 20px; z-index: 1000;">
-        Controles
-      </a-button>
-    </router-link>
+    <a-button @click="openControlsInNewTab" type="primary" size="large" style="position: absolute; top: 20px; right: 20px; z-index: 1000;">
+      Controles
+    </a-button>
     
     <div class="team-score local-team">
       <div class="team-name">{{ localTeam }}</div>
@@ -40,14 +12,14 @@
 
     <div class="game-info">
       <div class="time">{{ formattedTime }}</div>
-      <div class="period-container">
+      <!-- <div class="period-container">
         <div class="label" style="height: 80px;">Periodo</div>
         <div class="period" style="height: 220px;">{{ gamePeriod }}</div>
-      </div>
-      <div class="penalty-container">
+      </div> -->
+      <!-- <div class="penalty-container">
         <div class="label" style=" height:40px">Penalidad</div>
         <div class="penalty" style="font-size: 230px">{{ formattedPenalty }}</div>
-      </div>
+      </div> -->
     </div>
 
     <div class="team-score visit-team">
@@ -59,10 +31,23 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from "vue";
+import { useRouter } from "vue-router";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
 
 dayjs.extend(duration);
+
+const router = useRouter();
+
+const openControlsInNewTab = () => {
+  const route = router.resolve('/controls');
+  const width = 800;
+  const height = 600;
+  const left = (window.screen.width - width) / 2;
+  const top = (window.screen.height - height) / 2;
+  const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
+  window.open(route.href, 'controlsWindow', features);
+};
 
 const localTeam = ref(localStorage.getItem("local-team") || "Equipo Local");
 const visitTeam = ref(localStorage.getItem("visit-team") || "Equipo Visita");
@@ -209,7 +194,7 @@ watch(penaltyMilliseconds, (newVal) => {
 
 .team-score {
   position: absolute;
-  top: 30%;
+  top:40%;
   text-align: center;
   min-width: 400px;
 }
@@ -223,28 +208,31 @@ watch(penaltyMilliseconds, (newVal) => {
 }
 
 .team-name {
-  font-size: 120px;
+  font-size: 150px;
   word-wrap: break-word;
   white-space: normal;
-  max-width: 600px;
+  max-width: 900px;
   display: block;
 }
 
 
 .score {
   font-size: 570px;
+  transform: translateY(-20%);
+  position: relative;
+  top: 50%;
 }
 
 .game-info {
   position: absolute;
-  top: 0;
+  top: -10%;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
 }
 
 .time {
-  font-size: 380px;
+  font-size:500px;
 }
 
 .period-container,

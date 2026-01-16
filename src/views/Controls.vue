@@ -41,12 +41,12 @@
     </a-flex>
 
     <a-flex class="separator" justify="space-between" align="flex-end">
-      <div style="text-align: center">
+      <!-- <div style="text-align: center">
         <a-button class="control-button-2" size="large" @click="changePeriod">
           Cambiar periodo</a-button>
         <h1 style="margin-top: 10px; font-size: 40px">{{ gamePeriod }}</h1>
-      </div>
-      <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" />
+      </div> -->
+      <!-- <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" /> -->
 
       <div style="text-align: center">
         <a-select class="time-select" size="large" ref="select" v-model:value="selectedTime" style="width: 220px"
@@ -57,16 +57,16 @@
       </div>
 
       <a-button :danger="!isPaused" type="primary"
-        style="min-width: 150px; height: 80px; font-size: 28px; align-self: center" size="large" @click="togglePause">
+        style="min-width: 150px; height: 80px; font-size: 28px; align-self: center; margin-right: 100px;" size="large" @click="togglePause">
         {{ isPaused ? "Continuar" : "Pausar" }}</a-button>
 
-      <div style="text-align: center">
+      <!-- <div style="text-align: center">
         <a-select size="large" class="time-select" ref="select" v-model:value="selectedPenalty" style="width: 220px"
           :options="optionsPenalty"></a-select>
         <a-button class="control-button-2" size="large" @click="resetPenalty">
           Resetear Penalidad</a-button>
         <h1 style="margin-top: 10px; font-size: 40px">{{ formattedPenalty }}</h1>
-      </div>
+      </div> -->
     </a-flex>
   </div>
 </template>
@@ -83,6 +83,7 @@ const localGoals = ref(localStorage.getItem("goal-local") || "0");
 const visitGoals = ref(localStorage.getItem("goal-visit") || "0");
 
 const optionsTime = [
+  { value: "25:00", label: "25 minutos" },
   { value: "20:00", label: "20 minutos" },
   { value: "15:00", label: "15 minutos" },
   { value: "10:00", label: "10 minutos" },
