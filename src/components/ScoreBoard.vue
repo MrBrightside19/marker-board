@@ -1,6 +1,11 @@
 <template>
 
   <div class="scoreboard-container font-digital">
+    <div v-if="activeMatchId && remoteSyncEnabled" class="session-bar">
+      <span class="session-label">Partido: {{ activeMatchId }}</span>
+      <a class="session-link" :href="publicUrl" target="_blank" rel="noopener">Live público</a>
+    </div>
+
     <a-button
       @click="openControlsInNewTab"
       type="primary"
@@ -39,23 +44,73 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
+import {
+  readScoreboardStateFromLocalStorage,
+  useScoreboardStore,
+  writeScoreboardStateToLocalStorage,
+} from "../stores/scoreboard";
+import {
+  fetchMatchState,
+  isRemoteSyncEnabled,
+  publishMatchState,
+} from "../services/matchSync";
+import { getPollIntervalMs } from "../config/sync";
+import { getPublicLiveUrl, resolveActiveMatchId } from "../utils/activeMatch";
 
 dayjs.extend(duration);
 
 const router = useRouter();
+const route = useRoute();
+const scoreboardStore = useScoreboardStore();
+const activeMatchId = ref("");
+const remoteSyncEnabled = isRemoteSyncEnabled();
+const publicUrl = computed(() =>
+  activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
+);
+let publishTimeout: number | null = null;
+let pollInterval: number | null = null;
+
+const pollIntervalMs = getPollIntervalMs();
 
 const openControlsInNewTab = () => {
-  const route = router.resolve('/controls');
+  const routeLocation = router.resolve({
+    path: "/controls",
+    query: activeMatchId.value ? { matchId: activeMatchId.value } : {},
+  });
   const width = 800;
   const height = 600;
   const left = (window.screen.width - width) / 2;
   const top = (window.screen.height - height) / 2;
   const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
-  window.open(route.href, 'controlsWindow', features);
+  window.open(routeLocation.href, "controlsWindow", features);
+};
+
+const syncLocalRefsFromStorage = () => {
+  localTeam.value = localStorage.getItem("local-team") || "Equipo Local";
+  visitTeam.value = localStorage.getItem("visit-team") || "Equipo Visita";
+  goalLocal.value = Number(localStorage.getItem("goal-local") || 0);
+  goalVisit.value = Number(localStorage.getItem("goal-visit") || 0);
+  gamePeriod.value = Number(localStorage.getItem("game-period") || 1);
+  timeString.value = localStorage.getItem("time-game") || "20:00";
+  timeMilliseconds.value = convertToMilliseconds(timeString.value);
+  penaltyString.value = localStorage.getItem("penalty-game") || "00:00";
+  penaltyMilliseconds.value = convertToMilliseconds(penaltyString.value);
+  isPaused.value = localStorage.getItem("isPaused") === "true";
+};
+
+const scheduleRemotePublish = () => {
+  if (!isRemoteSyncEnabled() || !activeMatchId.value) return;
+  if (publishTimeout) {
+    window.clearTimeout(publishTimeout);
+  }
+  publishTimeout = window.setTimeout(() => {
+    scoreboardStore.setState(readScoreboardStateFromLocalStorage(), false);
+    publishMatchState(activeMatchId.value, scoreboardStore.state);
+  }, 120);
 };
 
 const localTeam = ref(localStorage.getItem("local-team") || "Equipo Local");
@@ -97,6 +152,7 @@ const startTimer = () => {
         timeMilliseconds.value = 0;
       }
       localStorage.setItem("time-game", formatTime(timeMilliseconds.value));
+      scheduleRemotePublish();
     }
   }, 1000);
 };
@@ -112,6 +168,7 @@ const startPenalty = () => {
         penaltyMilliseconds.value = 0;
       }
       localStorage.setItem("penalty-game", formatTime(penaltyMilliseconds.value));
+      scheduleRemotePublish();
     }
   }, 1000);
 };
@@ -149,6 +206,17 @@ const syncWithStorage = (event: StorageEvent) => {
 onMounted(() => {
   document.title = "Marcador";
 
+  const matchId = resolveActiveMatchId(
+    typeof route.query.matchId === "string" ? route.query.matchId : null
+  );
+  activeMatchId.value = matchId;
+  if (route.query.matchId !== matchId) {
+    router.replace({ path: "/", query: { matchId } });
+  }
+
+  scoreboardStore.hydrateFromLocalStorage();
+  syncLocalRefsFromStorage();
+
   window.addEventListener("storage", updateGoalLocal);
   window.addEventListener("storage", updateGoalVisit);
   window.addEventListener("storage", updateGamePeriod);
@@ -158,6 +226,29 @@ onMounted(() => {
   updateGoalLocal(); // Actualiza el valor inicial al montar la vista
   updateGoalVisit();
   updateGamePeriod();
+
+  const applyRemoteState = (remoteState: NonNullable<Awaited<ReturnType<typeof fetchMatchState>>>) => {
+    scoreboardStore.setState(remoteState);
+    writeScoreboardStateToLocalStorage(remoteState);
+    syncLocalRefsFromStorage();
+    startTimer();
+    startPenalty();
+  };
+
+  if (isRemoteSyncEnabled() && activeMatchId.value) {
+    fetchMatchState(activeMatchId.value).then((remoteState) => {
+      if (!remoteState) {
+        scheduleRemotePublish();
+        return;
+      }
+      applyRemoteState(remoteState);
+    });
+
+    pollInterval = window.setInterval(async () => {
+      const remoteState = await fetchMatchState(activeMatchId.value);
+      if (remoteState) applyRemoteState(remoteState);
+    }, pollIntervalMs);
+  }
 });
 
 onUnmounted(() => {
@@ -167,6 +258,12 @@ onUnmounted(() => {
   window.removeEventListener("storage", updateGoalLocal);
   window.removeEventListener("storage", updateGoalVisit);
   window.removeEventListener("storage", updateGamePeriod);
+  if (publishTimeout) {
+    window.clearTimeout(publishTimeout);
+  }
+  if (pollInterval) {
+    window.clearInterval(pollInterval);
+  }
 });
 
 // 📌 Convertir "mm:ss" a milisegundos
@@ -205,6 +302,27 @@ watch(penaltyMilliseconds, (newVal) => {
   overflow: hidden;
   background: #000;
   color: #fff;
+}
+
+.session-bar {
+  position: absolute;
+  top: clamp(8px, 2vh, 20px);
+  left: clamp(8px, 2vh, 20px);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: clamp(12px, 1.4vw, 18px);
+  max-width: min(50vw, 520px);
+}
+
+.session-label {
+  opacity: 0.85;
+}
+
+.session-link {
+  color: #69b1ff;
+  word-break: break-all;
 }
 
 .controls-button {

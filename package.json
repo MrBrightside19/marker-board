@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
     "ant-design-vue": "4.x",
     "dayjs": "^1.11.10",
     "pinia": "^2.3.1",
