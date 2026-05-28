@@ -1,40 +1,78 @@
 <template>
-
   <div class="controls">
     <router-link to="/" class="nav-button">
-      <a-button type="default" size="large" style="position: absolute; top: 20px; left: 20px; z-index: 1000;">
+      <a-button
+        type="default"
+        size="large"
+        style="position: absolute; top: 20px; left: 20px; z-index: 1000"
+      >
         ← Volver al Marcador
       </a-button>
     </router-link>
-    
+
     <a-flex class="separator" justify="space-between" align="center">
       <span style="margin: 10px">
         <h1>
           Local
 
-          <a-input style="width: 220px" v-model:value="local" size="large" placeholder="Nombre equipo local" />
+          <a-input
+            style="width: 220px"
+            v-model:value="local"
+            size="large"
+            placeholder="Nombre equipo local"
+          />
 
           Marcador: {{ localGoals }}
         </h1>
 
-        <a-button class="control-button" size="large" type="primary" @click="changeGoalLocal(+1)">Sumar Gol
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          @click="changeGoalLocal(+1)"
+          >Sumar Gol
         </a-button>
-        <a-button class="control-button" size="large" type="primary" @click="changeGoalLocal(-1)">Restar Gol
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          @click="changeGoalLocal(-1)"
+          >Restar Gol
         </a-button>
       </span>
-      <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" />
+      <a-divider
+        type="vertical"
+        style="height: 300px; background-color: black; width: 10px; top: 0"
+      />
 
       <div>
         <h1>
           Visita
 
-          <a-input style="width: 220px" v-model:value="visit" size="large" placeholder="Nombre equipo visita" />
+          <a-input
+            style="width: 220px"
+            v-model:value="visit"
+            size="large"
+            placeholder="Nombre equipo visita"
+          />
           Marcador: {{ visitGoals }}
         </h1>
-        <a-button class="control-button" size="large" type="primary" danger @click="changeGoalVisit(+1)">
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          danger
+          @click="changeGoalVisit(+1)"
+        >
           Sumar Gol
         </a-button>
-        <a-button class="control-button" size="large" type="primary" danger @click="changeGoalVisit(-1)">
+        <a-button
+          class="control-button"
+          size="large"
+          type="primary"
+          danger
+          @click="changeGoalVisit(-1)"
+        >
           Restar Gol
         </a-button>
       </div>
@@ -46,23 +84,50 @@
           Cambiar periodo</a-button>
         <h1 style="margin-top: 10px; font-size: 40px">{{ gamePeriod }}</h1>
       </div>
-      <a-divider type="vertical" style="height: 300px; background-color: black; width: 10px; top: 0" />
+      <a-divider
+        type="vertical"
+        style="height: 300px; background-color: black; width: 10px; top: 0"
+      />
 
       <div style="text-align: center">
-        <a-select class="time-select" size="large" ref="select" v-model:value="selectedTime" style="width: 220px"
-          :options="optionsTime"></a-select>
+        <a-select
+          class="time-select"
+          size="large"
+          ref="select"
+          v-model:value="selectedTime"
+          style="width: 220px"
+          :options="optionsTime"
+        ></a-select>
         <a-button class="control-button-2" size="large" @click="resetTime">
-          Resetear tiempo</a-button>
+          Resetear tiempo</a-button
+        >
         <h1 style="margin-top: 10px; font-size: 40px">{{ formattedTime }}</h1>
       </div>
 
-      <a-button :danger="!isPaused" type="primary"
-        style="min-width: 150px; height: 80px; font-size: 28px; align-self: center" size="large" @click="togglePause">
-        {{ isPaused ? "Continuar" : "Pausar" }}</a-button>
+      <a-button
+        :danger="!isPaused"
+        type="primary"
+        style="
+          min-width: 150px;
+          height: 80px;
+          font-size: 28px;
+          align-self: center;
+        "
+        size="large"
+        @click="togglePause"
+      >
+        {{ isPaused ? "Continuar" : "Pausar" }}</a-button
+      >
 
       <div style="text-align: center">
-        <a-select size="large" class="time-select" ref="select" v-model:value="selectedPenalty" style="width: 220px"
-          :options="optionsPenalty"></a-select>
+        <a-select
+          size="large"
+          class="time-select"
+          ref="select"
+          v-model:value="selectedPenalty"
+          style="width: 220px"
+          :options="optionsPenalty"
+        ></a-select>
         <a-button class="control-button-2" size="large" @click="resetPenalty">
           Resetear Penalidad</a-button>
         <h1 style="margin-top: 10px; font-size: 40px">{{ formattedPenalty }}</h1>
@@ -83,6 +148,7 @@ const localGoals = ref(localStorage.getItem("goal-local") || "0");
 const visitGoals = ref(localStorage.getItem("goal-visit") || "0");
 
 const optionsTime = [
+  { value: "25:00", label: "25 minutos" },
   { value: "20:00", label: "20 minutos" },
   { value: "15:00", label: "15 minutos" },
   { value: "10:00", label: "10 minutos" },
@@ -128,7 +194,7 @@ const changePeriod = () => {
   const currentValue = Number(localStorage.getItem("game-period") || 1);
   localStorage.setItem("game-period", (currentValue + 1).toString());
   if (currentValue + 1 > 4) {
-    localStorage.setItem("game-period", (1).toString());
+    localStorage.setItem("game-period", "1");
   }
   gamePeriod.value = localStorage.getItem("game-period") || "1";
 };
@@ -151,7 +217,7 @@ const resetPenalty = () => {
   if (confirmReset) {
     localStorage.setItem("penalty-game", selectedPenalty.value);
     formattedPenalty.value = selectedPenalty.value;
-    window.dispatchEvent(new Event("storage")); // Forzar actualización en todas las ventanas
+    window.dispatchEvent(new Event("storage"));
   }
 };
 
@@ -177,6 +243,9 @@ const syncWithStorage = (event: StorageEvent) => {
   if (event.key === "penalty-game") {
     formattedPenalty.value = localStorage.getItem("penalty-game") || "02:00";
   }
+  if (event.key === "game-period") {
+    gamePeriod.value = localStorage.getItem("game-period") || "1";
+  }
   if (event.key === "local-team") {
     storedLocal.value = localStorage.getItem("local-team") || "";
     local.value = storedLocal.value;
@@ -193,6 +262,7 @@ const syncWithStorage = (event: StorageEvent) => {
 
 // 🎯 Detectar cambios en `localStorage`
 onMounted(() => {
+  document.title = "Controles";
   window.addEventListener("storage", syncWithStorage);
 });
 
@@ -201,5 +271,4 @@ onUnmounted(() => {
 });
 watch(local, updateLocalTeam);
 watch(visit, updateVisitlTeam);
-
 </script>
