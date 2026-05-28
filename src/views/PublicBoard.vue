@@ -30,6 +30,18 @@
         <div class="team-name">{{ snapshot.visitTeam }}</div>
         <div class="team-score">{{ snapshot.goalVisit }}</div>
       </div>
+
+      <div class="play-status-bar">
+        <div class="play-status">
+          <span v-if="snapshot.penalizedVisit && !snapshot.penalizedLocal">Power play</span>
+        </div>
+        <div class="play-status">
+          <span v-if="snapshot.penalizedLocal && snapshot.penalizedVisit">3on3</span>
+        </div>
+        <div class="play-status">
+          <span v-if="snapshot.penalizedLocal && !snapshot.penalizedVisit">Power play</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -113,10 +125,12 @@ onUnmounted(() => {
 }
 
 .board-content {
+  position: relative;
   width: min(100vw, calc(100vh * 16 / 9));
   aspect-ratio: 16 / 9;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr auto;
   align-items: center;
 }
 
@@ -153,5 +167,21 @@ onUnmounted(() => {
 
 .meta-value {
   font-size: clamp(36px, 6vw, 120px);
+}
+
+.play-status-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: start;
+  margin-top: clamp(4px, 1vh, 16px);
+}
+
+.play-status {
+  font-size: clamp(18px, 3vw, 48px);
+  line-height: 1.1;
+  text-align: center;
+  color: #ffd666;
 }
 </style>

@@ -38,6 +38,18 @@
           <div class="team-name">{{ visitTeam }}</div>
           <div class="score">{{ goalVisit }}</div>
         </div>
+
+        <div class="play-status-bar">
+          <div class="play-status">
+            <span v-if="showPowerPlayLocal">Power play</span>
+          </div>
+          <div class="play-status">
+            <span v-if="showThreeOnThree">3on3</span>
+          </div>
+          <div class="play-status">
+            <span v-if="showPowerPlayVisit">Power play</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -118,6 +130,33 @@ const visitTeam = ref(localStorage.getItem("visit-team") || "Equipo Visita");
 const goalLocal = ref<number>(Number(localStorage.getItem("goal-local") || 0));
 const goalVisit = ref<number>(Number(localStorage.getItem("goal-visit") || 0));
 const gamePeriod = ref<number>(Number(localStorage.getItem("game-period") || 1));
+
+const readPenalizedLocal = () => localStorage.getItem("penalized-local") === "true";
+const readPenalizedVisit = () => localStorage.getItem("penalized-visit") === "true";
+
+const penalizedLocal = ref(readPenalizedLocal());
+const penalizedVisit = ref(readPenalizedVisit());
+
+const showThreeOnThree = computed(() => penalizedLocal.value && penalizedVisit.value);
+const showPowerPlayLocal = computed(
+  () => penalizedVisit.value && !penalizedLocal.value
+);
+const showPowerPlayVisit = computed(
+  () => penalizedLocal.value && !penalizedVisit.value
+);
+
+const syncPenalizedFlags = () => {
+  penalizedLocal.value = readPenalizedLocal();
+  penalizedVisit.value = readPenalizedVisit();
+  if (
+    localStorage.getItem("penalized-local") === null &&
+    localStorage.getItem("penalized-visit") === null
+  ) {
+    const legacy = localStorage.getItem("penalized-team");
+    penalizedLocal.value = legacy === "local";
+    penalizedVisit.value = legacy === "visit";
+  }
+};
 
 const updateGoalLocal = () => {
   goalLocal.value = Number(localStorage.getItem("goal-local") || 0);
@@ -201,6 +240,9 @@ const syncWithStorage = (event: StorageEvent) => {
       startPenalty();
     }
   }
+  if (event.key === "penalized-local" || event.key === "penalized-visit" || event.key === "penalized-team") {
+    syncPenalizedFlags();
+  }
 };
 
 onMounted(() => {
@@ -220,17 +262,20 @@ onMounted(() => {
   window.addEventListener("storage", updateGoalLocal);
   window.addEventListener("storage", updateGoalVisit);
   window.addEventListener("storage", updateGamePeriod);
+  window.addEventListener("storage", syncPenalizedFlags);
   startTimer();
   startPenalty();
   window.addEventListener("storage", syncWithStorage); // Escucha cambios en localStorage
   updateGoalLocal(); // Actualiza el valor inicial al montar la vista
   updateGoalVisit();
   updateGamePeriod();
+  syncPenalizedFlags();
 
   const applyRemoteState = (remoteState: NonNullable<Awaited<ReturnType<typeof fetchMatchState>>>) => {
     scoreboardStore.setState(remoteState);
     writeScoreboardStateToLocalStorage(remoteState);
     syncLocalRefsFromStorage();
+    syncPenalizedFlags();
     startTimer();
     startPenalty();
   };
@@ -258,6 +303,7 @@ onUnmounted(() => {
   window.removeEventListener("storage", updateGoalLocal);
   window.removeEventListener("storage", updateGoalVisit);
   window.removeEventListener("storage", updateGamePeriod);
+  window.removeEventListener("storage", syncPenalizedFlags);
   if (publishTimeout) {
     window.clearTimeout(publishTimeout);
   }
@@ -342,22 +388,26 @@ watch(penaltyMilliseconds, (newVal) => {
 .scoreboard-content {
   position: absolute;
   inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  padding: 0 4%;
 }
 
 .team-score {
-  position: absolute;
-  top: 42%;
+  grid-row: 1;
   text-align: center;
-  min-width: 16cqw;
-  max-width: 42cqw;
+  min-width: 0;
+  align-self: center;
 }
 
 .local-team {
-  left: 4%;
+  grid-column: 1;
 }
 
 .visit-team {
-  right: 4%;
+  grid-column: 3;
 }
 
 .team-name {
@@ -374,19 +424,18 @@ watch(penaltyMilliseconds, (newVal) => {
 
 .score {
   font-size: clamp(70px, 39.5cqh, 760px);
-  transform: translateY(-20%);
-  position: relative;
-  top: 50%;
   line-height: 0.9;
 }
 
 .game-info {
-  position: absolute;
-  top: 1%;
-  left: 50%;
-  transform: translateX(-50%);
+  grid-row: 1;
+  grid-column: 2;
+  align-self: start;
+  justify-self: center;
   text-align: center;
-  width: 48cqw;
+  width: 100%;
+  max-width: 48cqw;
+  margin-top: 1%;
 }
 
 .time {
@@ -416,5 +465,22 @@ watch(penaltyMilliseconds, (newVal) => {
 .penalty {
   font-size: clamp(24px, 13.9cqh, 340px);
   line-height: 0.95;
+}
+
+.play-status-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: start;
+  margin-top: clamp(4px, 1cqh, 16px);
+  pointer-events: none;
+}
+
+.play-status {
+  font-size: clamp(20px, 5.5cqh, 72px);
+  line-height: 1.1;
+  text-align: center;
+  color: #ffd666;
 }
 </style>

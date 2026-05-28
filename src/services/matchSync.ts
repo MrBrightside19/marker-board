@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { normalizeScoreboardState } from "../stores/scoreboard";
 import type { ScoreboardState } from "../types/scoreboard";
 
 type MatchRow = {
@@ -58,5 +59,6 @@ export async function fetchMatchState(matchId: string): Promise<ScoreboardState 
     return null;
   }
 
-  return (data?.state as ScoreboardState | undefined) || null;
+  const raw = data?.state as ScoreboardState | undefined;
+  return raw ? normalizeScoreboardState(raw) : null;
 }

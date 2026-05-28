@@ -14,7 +14,7 @@
     </router-link>
 
     <a-flex class="separator" justify="space-between" align="center">
-      <span style="margin: 10px">
+      <div class="team-goals-column">
         <h1>
           Local
 
@@ -28,27 +28,38 @@
           Marcador: {{ localGoals }}
         </h1>
 
-        <a-button
-          class="control-button"
-          size="large"
-          type="primary"
-          @click="changeGoalLocal(+1)"
-          >Sumar Gol
-        </a-button>
-        <a-button
-          class="control-button"
-          size="large"
-          type="primary"
-          @click="changeGoalLocal(-1)"
-          >Restar Gol
-        </a-button>
-      </span>
+        <div class="goal-buttons">
+          <a-button
+            class="control-button"
+            size="large"
+            type="primary"
+            @click="changeGoalLocal(+1)"
+            >Sumar Gol
+          </a-button>
+          <a-button
+            class="control-button"
+            size="large"
+            type="primary"
+            @click="changeGoalLocal(-1)"
+            >Restar Gol
+          </a-button>
+        </div>
+        <div class="penalty-toggle">
+          <a-button
+            class="penalty-button"
+            :type="penalizedLocal ? 'primary' : 'default'"
+            @click="togglePenalizedLocal"
+          >
+            Penalidad
+          </a-button>
+        </div>
+      </div>
       <a-divider
         type="vertical"
         style="height: 300px; background-color: black; width: 10px; top: 0"
       />
 
-      <div>
+      <div class="team-goals-column">
         <h1>
           Visita
 
@@ -60,24 +71,36 @@
           />
           Marcador: {{ visitGoals }}
         </h1>
-        <a-button
-          class="control-button"
-          size="large"
-          type="primary"
-          danger
-          @click="changeGoalVisit(+1)"
-        >
-          Sumar Gol
-        </a-button>
-        <a-button
-          class="control-button"
-          size="large"
-          type="primary"
-          danger
-          @click="changeGoalVisit(-1)"
-        >
-          Restar Gol
-        </a-button>
+        <div class="goal-buttons">
+          <a-button
+            class="control-button"
+            size="large"
+            type="primary"
+            danger
+            @click="changeGoalVisit(+1)"
+          >
+            Sumar Gol
+          </a-button>
+          <a-button
+            class="control-button"
+            size="large"
+            type="primary"
+            danger
+            @click="changeGoalVisit(-1)"
+          >
+            Restar Gol
+          </a-button>
+        </div>
+        <div class="penalty-toggle">
+          <a-button
+            class="penalty-button"
+            danger
+            :type="penalizedVisit ? 'primary' : 'default'"
+            @click="togglePenalizedVisit"
+          >
+            Penalidad
+          </a-button>
+        </div>
       </div>
     </a-flex>
 
@@ -115,6 +138,18 @@
         <a-button class="control-button-2" size="large" @click="resetTime">
           Resetear tiempo</a-button
         >
+        <div style="margin-top: 8px">
+          <a-button size="small" @click="adjustGameTime(10)">+10 s</a-button>
+          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(5)"
+            >+5 s</a-button
+          >
+          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(-5)"
+            >-5 s</a-button
+          >
+          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(-10)"
+            >-10 s</a-button
+          >
+        </div>
         <h1 style="margin-top: 10px; font-size: 40px">{{ formattedTime }}</h1>
       </div>
 
@@ -154,6 +189,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
+  normalizeScoreboardState,
   readScoreboardStateFromLocalStorage,
   useScoreboardStore,
   writeScoreboardStateToLocalStorage,
@@ -168,7 +204,7 @@ import { getPublicLiveUrl, resolveActiveMatchId } from "../utils/activeMatch";
 const local = ref(localStorage.getItem("local-team") || "");
 const visit = ref(localStorage.getItem("visit-team") || "");
 const selectedTime = ref("20:00");
-const selectedPenalty = ref("2:00");
+const selectedPenalty = ref("00:00");
 const gamePeriod = ref(localStorage.getItem("game-period") || "1");
 const localGoals = ref(localStorage.getItem("goal-local") || "0");
 const visitGoals = ref(localStorage.getItem("goal-visit") || "0");
@@ -182,11 +218,15 @@ const optionsTime = [
   // { value: "10:00", label: "10 minutos" },
 ];
 const optionsPenalty = [
+  { value: "00:00", label: "0 minutos (sin penalidad)" },
   { value: "2:00", label: "2 minutos" },
   { value: "4:00", label: "4 minutos" },
   { value: "5:00", label: "5 minutos" },
   { value: "10:00", label: "10 minutos" },
 ];
+
+const penalizedLocal = ref(false);
+const penalizedVisit = ref(false);
 
 // Estado de pausa
 const isPaused = ref(localStorage.getItem("isPaused") === "true");
@@ -225,6 +265,19 @@ const scheduleRemotePublish = () => {
   }, 120);
 };
 
+const syncPenalizedFromStorage = () => {
+  penalizedLocal.value = localStorage.getItem("penalized-local") === "true";
+  penalizedVisit.value = localStorage.getItem("penalized-visit") === "true";
+  if (
+    localStorage.getItem("penalized-local") === null &&
+    localStorage.getItem("penalized-visit") === null
+  ) {
+    const legacy = localStorage.getItem("penalized-team");
+    penalizedLocal.value = legacy === "local";
+    penalizedVisit.value = legacy === "visit";
+  }
+};
+
 const syncUiFromLocalStorage = () => {
   local.value = localStorage.getItem("local-team") || "";
   visit.value = localStorage.getItem("visit-team") || "";
@@ -232,8 +285,9 @@ const syncUiFromLocalStorage = () => {
   visitGoals.value = localStorage.getItem("goal-visit") || "0";
   gamePeriod.value = localStorage.getItem("game-period") || "1";
   formattedTime.value = localStorage.getItem("time-game") || "20:00";
-  formattedPenalty.value = localStorage.getItem("penalty-game") || "02:00";
+  formattedPenalty.value = localStorage.getItem("penalty-game") || "00:00";
   isPaused.value = localStorage.getItem("isPaused") === "true";
+  syncPenalizedFromStorage();
 };
 
 const tickTimersFromControls = () => {
@@ -244,7 +298,7 @@ const tickTimersFromControls = () => {
 
   const currentTimeMs = parseTimeToMs(localStorage.getItem("time-game") || "20:00");
   const currentPenaltyMs = parseTimeToMs(
-    localStorage.getItem("penalty-game") || "02:00"
+    localStorage.getItem("penalty-game") || "00:00"
   );
 
   const nextTime = formatTime(currentTimeMs - 1000);
@@ -286,6 +340,33 @@ const changeGoalVisit = (value: number) => {
   visitGoals.value = localStorage.getItem("goal-visit") || "0";
   scheduleRemotePublish();
 };
+const adjustGameTime = (seconds: number) => {
+  const currentMs = parseTimeToMs(localStorage.getItem("time-game") || "20:00");
+  const next = formatTime(currentMs + seconds * 1000);
+  localStorage.setItem("time-game", next);
+  formattedTime.value = next;
+  window.dispatchEvent(new Event("storage"));
+  scheduleRemotePublish();
+};
+
+const persistPenalizedFlags = () => {
+  localStorage.setItem("penalized-local", String(penalizedLocal.value));
+  localStorage.setItem("penalized-visit", String(penalizedVisit.value));
+  localStorage.removeItem("penalized-team");
+  window.dispatchEvent(new Event("storage"));
+  scheduleRemotePublish();
+};
+
+const togglePenalizedLocal = () => {
+  penalizedLocal.value = !penalizedLocal.value;
+  persistPenalizedFlags();
+};
+
+const togglePenalizedVisit = () => {
+  penalizedVisit.value = !penalizedVisit.value;
+  persistPenalizedFlags();
+};
+
 const changePeriod = () => {
   const currentValue = Number(localStorage.getItem("game-period") || 1);
   localStorage.setItem("game-period", (currentValue + 1).toString());
@@ -332,7 +413,7 @@ const updateVisitlTeam = () => {
 };
 
 const formattedTime = ref(localStorage.getItem("time-game") || "20:00");
-const formattedPenalty = ref(localStorage.getItem("penalty-game") || "02:00");
+const formattedPenalty = ref(localStorage.getItem("penalty-game") || "00:00");
 
 const storedLocal = ref(local.value);
 const storedVisit = ref(visit.value);
@@ -342,7 +423,10 @@ const syncWithStorage = (event: StorageEvent) => {
     formattedTime.value = localStorage.getItem("time-game") || "20:00";
   }
   if (event.key === "penalty-game") {
-    formattedPenalty.value = localStorage.getItem("penalty-game") || "02:00";
+    formattedPenalty.value = localStorage.getItem("penalty-game") || "00:00";
+  }
+  if (event.key === "penalized-local" || event.key === "penalized-visit" || event.key === "penalized-team") {
+    syncPenalizedFromStorage();
   }
   if (event.key === "game-period") {
     gamePeriod.value = localStorage.getItem("game-period") || "1";
@@ -382,8 +466,9 @@ onMounted(() => {
         scheduleRemotePublish();
         return;
       }
-      scoreboardStore.setState(remoteState);
-      writeScoreboardStateToLocalStorage(remoteState);
+      const normalized = normalizeScoreboardState(remoteState);
+      scoreboardStore.setState(normalized);
+      writeScoreboardStateToLocalStorage(normalized);
       syncUiFromLocalStorage();
     });
   }
@@ -409,3 +494,34 @@ onUnmounted(() => {
 watch(local, updateLocalTeam);
 watch(visit, updateVisitlTeam);
 </script>
+
+<style scoped>
+.team-goals-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px;
+  text-align: center;
+}
+
+.goal-buttons {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.penalty-toggle {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.penalty-button {
+  min-width: 120px;
+  height: 36px;
+  font-size: 14px;
+}
+</style>
