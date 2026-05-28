@@ -1,30 +1,39 @@
 <template>
 
   <div class="scoreboard-container font-digital">
-    <a-button @click="openControlsInNewTab" type="primary" size="large" style="position: absolute; top: 20px; right: 20px; z-index: 1000;">
+    <a-button
+      @click="openControlsInNewTab"
+      type="primary"
+      size="large"
+      class="controls-button"
+    >
       Controles
     </a-button>
-    
-    <div class="team-score local-team">
-      <div class="team-name">{{ localTeam }}</div>
-      <div class="score">{{ goalLocal }}</div>
-    </div>
 
-    <div class="game-info">
-      <div class="time">{{ formattedTime }}</div>
-      <div class="period-container">
-        <div class="label" style="height: 80px;">Periodo</div>
-        <div class="period" style="height: 220px;">{{ gamePeriod }}</div>
-      </div>
-      <div class="penalty-container">
-        <div class="label" style=" height:40px">Penalidad</div>
-        <div class="penalty" style="font-size: 230px">{{ formattedPenalty }}</div>
-      </div>
-    </div>
+    <div class="scoreboard-stage">
+      <div class="scoreboard-content">
+        <div class="team-score local-team">
+          <div class="team-name">{{ localTeam }}</div>
+          <div class="score">{{ goalLocal }}</div>
+        </div>
 
-    <div class="team-score visit-team">
-      <div class="team-name">{{ visitTeam }}</div>
-      <div class="score">{{ goalVisit }}</div>
+        <div class="game-info">
+          <div class="time">{{ formattedTime }}</div>
+          <div class="period-container">
+            <div class="label">Periodo</div>
+            <div class="period">{{ gamePeriod }}</div>
+          </div>
+          <div class="penalty-container">
+            <div class="label penalty-label">Penalidad</div>
+            <div class="penalty">{{ formattedPenalty }}</div>
+          </div>
+        </div>
+
+        <div class="team-score visit-team">
+          <div class="team-name">{{ visitTeam }}</div>
+          <div class="score">{{ goalVisit }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -120,7 +129,7 @@ const syncWithStorage = (event: StorageEvent) => {
     startPenalty(); // Reinicia el temporizador con el nuevo tiempo
   }
   if (event.key === "local-team") {
-    localTeam.value = localStorage.getItem("local-team") || "Equipo Local";
+    localTeam.value = localStorage.getItem("local-team") || "";
   }
   if (event.key === "visit-team") {
     visitTeam.value = localStorage.getItem("visit-team") || "Equipo Visita";
@@ -188,66 +197,106 @@ watch(penaltyMilliseconds, (newVal) => {
 
 <style scoped lang="scss">
 .scoreboard-container {
+  display: grid;
+  place-items: center;
   position: relative;
   width: 100vw;
   height: 100vh;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+}
 
+.controls-button {
+  position: absolute;
+  top: clamp(8px, 2vh, 20px);
+  right: clamp(8px, 2vh, 20px);
+  z-index: 1000;
+}
+
+.scoreboard-stage {
+  width: min(100vw, calc(100vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  position: relative;
+  container-type: size;
+}
+
+.scoreboard-content {
+  position: absolute;
+  inset: 0;
 }
 
 .team-score {
   position: absolute;
-  top:40%;
+  top: 42%;
   text-align: center;
-  min-width: 400px;
+  min-width: 16cqw;
+  max-width: 42cqw;
 }
 
 .local-team {
-  left: 5%;
+  left: 4%;
 }
 
 .visit-team {
-  right: 5%;
+  right: 4%;
 }
 
 .team-name {
-  font-size: 150px;
+  font-size: clamp(18px, 10.4cqh, 220px);
   word-wrap: break-word;
   white-space: normal;
-  max-width: 900px;
+  max-width: 38cqw;
   display: block;
+  line-height: 1.05;
+  margin-bottom: clamp(8px, 3.5cqh, 50px);
+
 }
 
 
 .score {
-  font-size: 570px;
+  font-size: clamp(70px, 39.5cqh, 760px);
   transform: translateY(-20%);
   position: relative;
   top: 50%;
+  line-height: 0.9;
 }
 
 .game-info {
   position: absolute;
-  top: -10%;
+  top: 1%;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
+  width: 48cqw;
 }
 
 .time {
-  font-size:500px;
+  font-size: clamp(64px, 34.5cqh, 700px);
+  line-height: 0.9;
 }
 
 .period-container,
 .penalty-container {
-  margin-top: 5px;
+  margin-top: clamp(2px, 0.35cqh, 10px);
 }
 
 .label {
-  font-size: 90px;
+  font-size: clamp(14px, 6.25cqh, 130px);
+  line-height: 1;
+}
+
+.period-container .label {
+  min-height: clamp(18px, 5.55cqh, 90px);
+}
+
+.penalty-label {
+  min-height: clamp(12px, 2.77cqh, 50px);
 }
 
 .period,
 .penalty {
-  font-size: 200px;
+  font-size: clamp(24px, 13.9cqh, 340px);
+  line-height: 0.95;
 }
 </style>
