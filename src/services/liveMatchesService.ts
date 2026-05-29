@@ -115,16 +115,17 @@ export async function registerMatchRecord(options: {
   title?: string;
   tournamentId?: string | null;
   isLive?: boolean;
-}): Promise<void> {
+}): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return false;
 
   const state = normalizeScoreboardState(options.state);
   const title = options.title?.trim() || buildTitle(state);
 
+  const publishedAt = state.updatedAt || new Date().toISOString();
   const row: Record<string, unknown> = {
     id: options.matchId,
-    state: { ...state, updatedAt: new Date().toISOString() },
+    state: { ...state, updatedAt: publishedAt },
     title,
     is_live: options.isLive ?? true,
     organizer_id: options.organizerId ?? null,
@@ -140,7 +141,9 @@ export async function registerMatchRecord(options: {
 
   if (error) {
     console.error("[liveMatches] register", error.message);
+    return false;
   }
+  return true;
 }
 
 export async function setMatchLiveStatus(matchId: string, isLive: boolean): Promise<void> {

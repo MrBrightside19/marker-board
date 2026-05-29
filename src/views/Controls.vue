@@ -5,6 +5,7 @@
         <div v-if="activeMatchId && remoteSyncEnabled" class="match-panel-info">
           <span v-if="tournamentContext">
             <strong>{{ tournamentContext.tournament.name }}</strong>
+            <a-tag color="blue">Cancha {{ formatCourtLabel(tournamentContext.court) }}</a-tag>
             <span v-if="tournamentContext.currentMatch">
               · {{ tournamentContext.currentMatch.localTeam }} vs
               {{ tournamentContext.currentMatch.visitTeam }}
@@ -159,7 +160,9 @@
 
     <section v-if="isTournamentMode" class="upcoming-panel">
       <h2 class="upcoming-title">
-        Siguientes partidos
+        Siguientes partidos<span v-if="tournamentContext?.court">
+          — Cancha {{ formatCourtLabel(tournamentContext.court) }}</span
+        >
         <span class="upcoming-count">({{ tournamentContext?.upcomingMatches.length ?? 0 }})</span>
       </h2>
       <a-table
@@ -213,12 +216,14 @@ import {
 import { setMatchLiveStatus } from "../services/liveMatchesService";
 import {
   createMatchId,
+  getActiveCourt,
   getActiveTournamentId,
   getPublicLiveUrl,
   resolveActiveMatchId,
   setActiveMatchId,
   setActiveTournamentId,
 } from "../utils/activeMatch";
+import { formatCourtLabel } from "../utils/court";
 import {
   GAME_TIME_ENDED_EVENT,
   handleGameTimeTick,
@@ -286,7 +291,7 @@ const publicUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
 
-const isTournamentMode = computed(() => activeTournamentId.value !== null);
+const isTournamentMode = computed(() => Boolean(activeTournamentId.value));
 const hasUpcomingMatch = computed(
   () => (tournamentContext.value?.upcomingMatches.length ?? 0) > 0
 );
@@ -341,6 +346,15 @@ const publishOptions = () => {
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
 
+/** El reloj visible en UI debe estar en el store antes de publicar (evita reset en TV/live). */
+function syncClocksToStore() {
+  touchControlsWriterHeartbeat();
+  scoreboardStore.updatePartial({
+    timeGame: formattedTime.value,
+    penaltyGame: formattedPenalty.value,
+  });
+}
+
 function clearPendingPublish() {
   if (publishTimeout) {
     window.clearTimeout(publishTimeout);
@@ -356,6 +370,7 @@ const scheduleRemotePublish = () => {
   publishTimeout = window.setTimeout(() => {
     publishTimeout = null;
     if (advancingMatch.value) return;
+    syncClocksToStore();
     void publishMatchState(activeMatchId.value, scoreboardStore.state, {
       ...publishOptions(),
       isLive: true,
@@ -366,6 +381,7 @@ const scheduleRemotePublish = () => {
 const flushRemotePublish = () => {
   if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
   clearPendingPublish();
+  syncClocksToStore();
   void publishMatchState(activeMatchId.value, scoreboardStore.state, {
     ...publishOptions(),
     isLive: true,
@@ -379,19 +395,23 @@ async function loadTournamentContext() {
     }
     return;
   }
+
   loadingTournament.value = true;
   try {
     let ctx = await fetchTournamentControlsContext(activeMatchId.value);
     if (!ctx && activeTournamentId.value) {
       ctx = await fetchTournamentControlsContextByTournamentId(
         activeTournamentId.value,
-        activeMatchId.value
+        activeMatchId.value,
+        getActiveCourt() ?? tournamentContext.value?.court
       );
     }
     if (ctx) {
       activeTournamentId.value = ctx.tournament.id;
       setActiveTournamentId(ctx.tournament.id);
       tournamentContext.value = ctx;
+    } else if (!activeTournamentId.value) {
+      tournamentContext.value = null;
     }
   } finally {
     loadingTournament.value = false;
@@ -428,12 +448,12 @@ const syncUiFromLocalStorage = () => {
 const tickTimersFromControls = () => {
   if (advancingMatch.value) return;
 
+  touchControlsWriterHeartbeat();
+
   if (isPaused.value) {
     syncUiFromLocalStorage();
     return;
   }
-
-  touchControlsWriterHeartbeat();
 
   const currentTimeMs = parseTimeToMs(scoreboardStore.state.timeGame || "20:00");
   const currentPenaltyMs = parseTimeToMs(scoreboardStore.state.penaltyGame || "00:00");
@@ -488,6 +508,7 @@ const togglePause = () => {
 };
 
 const changeGoalLocal = (value: number) => {
+  syncClocksToStore();
   const next = Math.max(0, scoreboardStore.state.goalLocal + value);
   scoreboardStore.updatePartial({ goalLocal: next });
   localGoals.value = String(next);
@@ -496,6 +517,7 @@ const changeGoalLocal = (value: number) => {
 };
 
 const changeGoalVisit = (value: number) => {
+  syncClocksToStore();
   const next = Math.max(0, scoreboardStore.state.goalVisit + value);
   scoreboardStore.updatePartial({ goalVisit: next });
   visitGoals.value = String(next);
@@ -618,8 +640,18 @@ const resetPenalty = () => {
   }
 };
 
+function findActiveTournamentMatch(): TournamentMatch | null {
+  const ctx = tournamentContext.value;
+  if (!ctx || !activeMatchId.value) return null;
+
+  const byId = ctx.tournament.matches.find((m) => m.matchId === activeMatchId.value);
+  if (byId) return byId;
+
+  return ctx.currentMatch;
+}
+
 async function finishCurrentTournamentMatchIfNeeded() {
-  const current = tournamentContext.value?.currentMatch;
+  const current = findActiveTournamentMatch();
   if (!current || !activeMatchId.value) return;
 
   clearPendingPublish();
@@ -671,11 +703,13 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
     message.warning("Inicia sesión como organizador");
     return;
   }
+  if (advancingMatch.value) return;
 
   startingMatchId.value = scheduled.id;
   clearPendingPublish();
   advancingMatch.value = true;
   try {
+    await loadTournamentContext();
     await finishCurrentTournamentMatchIfNeeded();
 
     activeTournamentId.value = scheduled.tournamentId;
@@ -689,6 +723,7 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
     notifyMatchChanged(matchId);
 
     if (remoteSyncEnabled) {
+      syncClocksToStore();
       await publishMatchState(matchId, scoreboardStore.state, {
         ...publishOptions(),
         organizerId: auth.userId,
@@ -697,7 +732,9 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
     }
 
     await loadTournamentContext();
-    message.success(`${scheduled.localTeam} vs ${scheduled.visitTeam}`);
+    message.success(
+      `${scheduled.localTeam} vs ${scheduled.visitTeam}. Nueva URL live: ${getPublicLiveUrl(matchId)}`
+    );
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo cargar el partido");
   } finally {
@@ -716,16 +753,20 @@ async function startScheduledTournamentMatch(scheduled: TournamentMatch) {
 }
 
 async function startNextTournamentMatch() {
+  if (!tournamentContext.value) {
+    await loadTournamentContext();
+  }
+
   const next = tournamentContext.value?.upcomingMatches[0];
   if (!next) {
-    message.info("No hay más partidos programados en el torneo");
+    message.info("No hay más partidos programados en esta cancha");
     return;
   }
 
   const confirmed = window.confirm(
     `¿Pasar al siguiente partido?\n\n` +
       `${next.localTeam} vs ${next.visitTeam} (${next.timeGame})\n\n` +
-      "Se reinician goles, periodo y relojes. El marcador en TV debe actualizar el partido activo."
+      "Se reinician goles, periodo y relojes. Habra una nueva URL de live para espectadores."
   );
   if (!confirmed) return;
 
@@ -829,40 +870,40 @@ const onGameTimeEnded = () => {
   showTimeEndedAlert.value = true;
 };
 
-onMounted(() => {
+onMounted(async () => {
   document.title = "Controles";
 
   const matchId = resolveActiveMatchId(
     typeof route.query.matchId === "string" ? route.query.matchId : null
   );
   activeMatchId.value = matchId;
+  activeTournamentId.value = getActiveTournamentId();
   if (route.query.matchId !== matchId) {
     router.replace({ path: "/controls", query: { matchId } });
   }
 
   scoreboardStore.hydrateFromLocalStorage();
   syncUiFromLocalStorage();
+
   claimControlsWriter();
   window.addEventListener("beforeunload", releaseControlsWriter);
 
-  void loadTournamentContext();
+  await auth.init();
+  await loadTournamentContext();
 
   if (remoteSyncEnabled && activeMatchId.value) {
-    fetchMatchState(activeMatchId.value).then((remoteState) => {
-      if (!remoteState) {
-        scheduleRemotePublish();
-        return;
-      }
-      const localUpdatedAt = scoreboardStore.state.updatedAt;
-      if (!isRemoteStateNewer(remoteState, localUpdatedAt)) {
-        scheduleRemotePublish();
-        return;
-      }
-      const normalized = normalizeScoreboardState(remoteState);
-      scoreboardStore.setState(normalized);
+    const remoteState = await fetchMatchState(activeMatchId.value);
+    if (!remoteState) {
+      scheduleRemotePublish();
+    } else if (
+      isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)
+    ) {
+      scoreboardStore.setState(normalizeScoreboardState(remoteState));
       syncUiFromLocalStorage();
       notifyScoreboardSync();
-    });
+    } else {
+      scheduleRemotePublish();
+    }
   }
 
   controlsTicker = window.setInterval(() => {

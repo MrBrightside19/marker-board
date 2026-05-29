@@ -2,7 +2,6 @@
   <div class="tournaments-page">
     <header class="page-header">
       <div>
-        <router-link to="/" class="back-link">← Inicio</router-link>
         <h1>Mis torneos</h1>
         <p v-if="auth.isOrganizer">Crea torneos, carga el calendario y opera cada partido.</p>
         <p v-else>Solo los organizadores pueden crear torneos.</p>

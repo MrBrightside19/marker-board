@@ -1,7 +1,7 @@
 <template>
   <div class="public-board font-digital">
     <div v-if="!matchId" class="status-message">
-      Debes abrir esta vista con un matchId valido.
+      Debes abrir esta vista con un enlace de live valido (/live/:matchId).
     </div>
     <div v-else-if="!isRemoteConfigured" class="status-message">
       Sincronizacion remota no configurada. Define VITE_SUPABASE_URL y
@@ -50,10 +50,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { fetchMatchState, isRemoteSyncEnabled } from "../services/matchSync";
-import {
-  DEFAULT_SCOREBOARD_STATE,
-  type ScoreboardState,
-} from "../types/scoreboard";
+import { DEFAULT_SCOREBOARD_STATE, type ScoreboardState } from "../types/scoreboard";
 import { getPollIntervalMs } from "../config/sync";
 import { getRunningClocks } from "../utils/scoreboardClock";
 import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
@@ -65,6 +62,7 @@ const route = useRoute();
 const snapshot = ref<ScoreboardState>({ ...DEFAULT_SCOREBOARD_STATE });
 const nowMs = ref(Date.now());
 const loadError = ref("");
+
 const matchId = computed(() => route.params.matchId?.toString() || "");
 const isRemoteConfigured = isRemoteSyncEnabled();
 
@@ -109,14 +107,13 @@ async function refreshFromServer() {
 
   loadError.value = "";
   snapshot.value = remote;
+  document.title = "Marcador en vivo";
 }
 
 onMounted(async () => {
-  document.title = "Marcador en vivo";
   if (!matchId.value || !isRemoteConfigured) return;
 
   await refreshFromServer();
-
   prevTimeGame.value = clocks.value.timeGame;
 
   tickInterval = window.setInterval(() => {
@@ -126,7 +123,7 @@ onMounted(async () => {
   window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
 
   pollInterval = window.setInterval(() => {
-    refreshFromServer();
+    void refreshFromServer();
   }, pollIntervalMs);
 });
 

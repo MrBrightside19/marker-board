@@ -12,6 +12,15 @@ export interface ScoreboardState {
   updatedAt: string;
 }
 
+export function isDefaultScoreboardState(state: ScoreboardState): boolean {
+  return (
+    state.localTeam === DEFAULT_SCOREBOARD_STATE.localTeam &&
+    state.visitTeam === DEFAULT_SCOREBOARD_STATE.visitTeam &&
+    state.goalLocal === 0 &&
+    state.goalVisit === 0
+  );
+}
+
 export const DEFAULT_SCOREBOARD_STATE: ScoreboardState = {
   localTeam: "Equipo Local",
   visitTeam: "Equipo Visita",

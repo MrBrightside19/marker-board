@@ -97,7 +97,7 @@ No necesitas habilitar Replication/Realtime en Supabase para el live publico.
 | `/tournaments/:id` | Detalle, plantilla CSV y calendario |
 | `/board` | Marcador TV (pantalla de cancha) |
 | `/controls` | Mesa de control del partido |
-| `/live/:matchId` | Marcador publico para espectadores |
+| `/live/:matchId` | Marcador publico (un enlace por partido) |
 
 Al abrir marcador o controles sin `matchId` en la URL, se genera uno automaticamente (ej. `partido-m5abc123`).
 
@@ -117,6 +117,8 @@ La lista **En vivo ahora** muestra partidos activos (actualizados en las ultimas
 3. Ejecuta `supabase/tournament-results.sql` (marcadores finales, estado del torneo).
 4. Activa **Email** en Authentication → Providers.
 
+Opcional (canchas en calendario CSV): `supabase/tournament-courts.sql`.
+
 Para vaciar partidos y torneos **sin borrar cuentas**, ejecuta `supabase/reset-app-data.sql`.
 
 ### Torneos (organizadores)
@@ -124,8 +126,10 @@ Para vaciar partidos y torneos **sin borrar cuentas**, ejecuta `supabase/reset-a
 - Ruta **/tournaments** — crear torneo (nombre, fecha inicio/fin).
 - Plantilla fija en la web: `/marker-board/plantilla-partidos-torneo.csv` (cada fila define su `tiempo_juego`).
 - En el detalle del torneo: **descargar plantilla** y **subir partidos** en lote.
-- Columnas: `local`, `visita`, `tiempo_juego` (obligatorio), `fecha_programada` (opcional, `yyyy-MM-dd HH:mm`).
+- Columnas: `local`, `visita`, `tiempo_juego`, `cancha` (obligatorias), `fecha_programada` (opcional, `yyyy-MM-dd HH:mm`).
 - Cada fila importada queda como partido **programado**; usa **Mesa de control** para operarlo (reloj en pausa al iniciar).
+- **Live**: cada partido tiene su URL (`/live/:matchId`). Al pasar al siguiente partido se genera un nuevo enlace (copialo desde Controles o Marcador TV).
+- En torneo con varias canchas, **Siguiente partido** avanza solo partidos de la misma cancha.
 - Al pasar al **siguiente partido**, se guarda el marcador final (goles y fecha) en el historial.
 - En **Inicio**: torneos en curso con últimos resultados, tabla global de resultados recientes y torneos finalizados con tabla de posiciones (3 pts victoria, 1 empate).
 - En el detalle del torneo: **Finalizar torneo** publica la tabla definitiva (partidos, ganadores, puntos).

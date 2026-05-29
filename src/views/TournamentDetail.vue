@@ -2,13 +2,16 @@
   <div class="tournament-detail" v-if="tournament">
     <header class="page-header">
       <div>
-        <router-link to="/tournaments" class="back-link">← Mis torneos</router-link>
         <h1>
           {{ tournament.name }}
           <a-tag v-if="tournament.status === 'finished'" color="default">Finalizado</a-tag>
           <a-tag v-else color="green">Activo</a-tag>
         </h1>
         <p>{{ formatDate(tournament.startDate) }} — {{ formatDate(tournament.endDate) }}</p>
+        <p class="live-hint">
+          Cada partido tiene su propia URL de live. Copiala desde
+          <strong>Marcador TV</strong> o <strong>Controles</strong> al iniciar el encuentro.
+        </p>
       </div>
       <a-button
         v-if="tournament.status === 'active'"
@@ -26,8 +29,9 @@
       <p>
         Descarga la
         <a :href="templateUrl" download target="_blank" rel="noopener">plantilla CSV</a>,
-        complétala con <strong>local</strong>, <strong>visita</strong> y
-        <strong>tiempo_juego</strong> (cada partido su duración). Opcional:
+        complétala con <strong>local</strong>, <strong>visita</strong>,
+        <strong>tiempo_juego</strong> y <strong>cancha</strong> (número o nombre;
+        por defecto <code>1</code>). Opcional:
         <strong>fecha_programada</strong> (<code>yyyy-MM-dd HH:mm</code>).
       </p>
 
@@ -65,6 +69,10 @@
 
     <section class="matches-section">
       <h2>Partidos del torneo ({{ tournament.matches.length }})</h2>
+      <p class="matches-hint">
+        Usa <strong>Marcador TV</strong> para abrir la pantalla de cancha; desde ahí abre
+        <strong>Controles</strong> en otra ventana.
+      </p>
 
       <a-empty v-if="tournament.matches.length === 0" description="Importa partidos con el CSV" />
 
@@ -84,23 +92,23 @@
             <span v-if="record.goalLocal != null">{{ record.goalLocal }} - {{ record.goalVisit }}</span>
             <span v-else>—</span>
           </template>
+          <template v-else-if="column.key === 'court'">
+            {{ formatCourtLabel(record.court) }}
+          </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-space>
+            <a-space wrap>
               <a-button
                 v-if="record.status !== 'finished' && tournament.status === 'active'"
                 type="primary"
                 size="small"
-                :loading="startingId === record.id"
-                @click="operateMatch(record.id)"
+                :loading="openingBoardId === record.id"
+                @click="openMarcadorTab(record)"
               >
-                Mesa de control
+                Marcador TV
               </a-button>
-              <router-link v-if="record.matchId" :to="liveRoute(record.matchId)">
-                <a-button size="small">Live</a-button>
-              </router-link>
             </a-space>
           </template>
         </template>
@@ -128,23 +136,28 @@ import {
   finalizeTournament,
   startTournamentMatch,
 } from "../services/tournamentService";
+import { fetchMatchState, publishMatchState } from "../services/matchSync";
+import {
+  createFreshMatchState,
+  normalizeScoreboardState,
+  writeScoreboardStateToLocalStorage,
+} from "../stores/scoreboard";
 import { getTournamentTemplateUrl, parseTournamentCsv } from "../utils/tournamentCsv";
 
 const templateUrl = getTournamentTemplateUrl();
-import { boardRoute, liveRoute as liveRouteUtil } from "../utils/routes";
-import { setActiveMatchId } from "../utils/activeMatch";
-import { useScoreboardStore } from "../stores/scoreboard";
+import { openBoardInNewTab } from "../utils/routes";
+import { setActiveMatchId, setActiveTournamentId } from "../utils/activeMatch";
+import { formatCourtLabel } from "../utils/court";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const scoreboardStore = useScoreboardStore();
-
 const tournament = ref<TournamentWithMatches | null>(null);
+
 const importing = ref(false);
 const importedCount = ref(0);
 const importErrors = ref<{ line: number; message: string }[]>([]);
-const startingId = ref<string | null>(null);
+const openingBoardId = ref<string | null>(null);
 const finalizing = ref(false);
 
 const finishedMatchCount = computed(
@@ -157,11 +170,12 @@ const finishedMatchCount = computed(
 const columns = [
   { title: "Local", dataIndex: "localTeam", key: "localTeam" },
   { title: "Visita", dataIndex: "visitTeam", key: "visitTeam" },
+  { title: "Cancha", key: "court", width: 80, align: "center" as const },
   { title: "Resultado", key: "result", width: 100, align: "center" as const },
   { title: "Tiempo", dataIndex: "timeGame", key: "timeGame", width: 90 },
   { title: "Programado", key: "scheduledAt", width: 160 },
   { title: "Estado", key: "status", width: 110 },
-  { title: "Acciones", key: "actions", width: 220 },
+  { title: "Acciones", key: "actions", width: 140 },
 ];
 
 function formatDate(value: string) {
@@ -184,8 +198,41 @@ function statusColor(status: TournamentMatch["status"]) {
   return "blue";
 }
 
-function liveRoute(matchId: string) {
-  return liveRouteUtil(matchId);
+async function openMarcadorTab(record: TournamentMatch) {
+  if (!auth.userId || !tournament.value) return;
+
+  openingBoardId.value = record.id;
+  try {
+    let matchId = record.matchId;
+    if (!matchId) {
+      const started = await startTournamentMatch(record.id, auth.userId);
+      matchId = started.matchId;
+      await loadTournament();
+    }
+    setActiveTournamentId(tournament.value.id);
+    setActiveMatchId(matchId);
+
+    let state = await fetchMatchState(matchId);
+    if (!state) {
+      state = createFreshMatchState({
+        localTeam: record.localTeam,
+        visitTeam: record.visitTeam,
+        timeGame: record.timeGame,
+      });
+      await publishMatchState(matchId, state, {
+        organizerId: auth.userId,
+        tournamentId: tournament.value.id,
+        isLive: true,
+      });
+    }
+    writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
+
+    openBoardInNewTab(router, matchId);
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "No se pudo abrir el marcador");
+  } finally {
+    openingBoardId.value = null;
+  }
 }
 
 async function loadTournament() {
@@ -254,23 +301,6 @@ async function handleFinalizeTournament() {
   }
 }
 
-async function operateMatch(tournamentMatchId: string) {
-  if (!auth.userId) return;
-
-  startingId.value = tournamentMatchId;
-  try {
-    const { matchId } = await startTournamentMatch(tournamentMatchId, auth.userId);
-    setActiveMatchId(matchId);
-    scoreboardStore.hydrateFromLocalStorage();
-
-    await router.push(boardRoute(matchId));
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : "No se pudo abrir el partido");
-  } finally {
-    startingId.value = null;
-  }
-}
-
 onMounted(async () => {
   await auth.init();
   if (!auth.isOrganizer) {
@@ -324,6 +354,13 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.6);
 }
 
+.live-hint {
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  max-width: 520px;
+}
+
 .back-link {
   color: #69b1ff;
 }
@@ -343,6 +380,12 @@ onMounted(async () => {
 .matches-section h2 {
   margin: 0 0 12px;
   font-size: 18px;
+}
+
+.matches-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .import-panel p {

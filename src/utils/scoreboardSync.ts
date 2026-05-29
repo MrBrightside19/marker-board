@@ -6,7 +6,7 @@ export const SCOREBOARD_WRITER_KEY = "scoreboard-writer";
 export const SCOREBOARD_WRITER_HEARTBEAT = "scoreboard-writer-heartbeat";
 export const SCOREBOARD_WRITER_CONTROLS = "controls";
 
-const WRITER_STALE_MS = 4000;
+const WRITER_STALE_MS = 15000;
 
 /** Controles toma el tick (compartido entre pestañas/ventanas vía localStorage). */
 export function claimControlsWriter(): void {

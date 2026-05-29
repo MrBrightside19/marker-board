@@ -9,8 +9,9 @@
     name text not null,
     start_date date not null,
     end_date date not null,
-    status text not null default 'active' check (status in ('active', 'finished')),
-    created_at timestamptz not null default now(),
+  status text not null default 'active' check (status in ('active', 'finished')),
+  live_match_id text references public.matches (id) on delete set null,
+  created_at timestamptz not null default now(),
     constraint tournaments_dates_check check (end_date >= start_date)
   );
 
@@ -22,6 +23,7 @@
     local_team text not null,
     visit_team text not null,
     time_game text not null default '20:00',
+    court text not null default '1',
     match_id text references public.matches (id) on delete set null,
     status text not null default 'scheduled'
       check (status in ('scheduled', 'live', 'finished')),

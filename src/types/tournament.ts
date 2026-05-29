@@ -8,6 +8,7 @@ export interface Tournament {
   startDate: string;
   endDate: string;
   status: TournamentStatus;
+  liveMatchId: string | null;
   createdAt: string;
 }
 
@@ -19,6 +20,7 @@ export interface TournamentMatch {
   localTeam: string;
   visitTeam: string;
   timeGame: string;
+  court: string;
   matchId: string | null;
   status: TournamentMatchStatus;
   goalLocal: number | null;
@@ -34,6 +36,7 @@ export interface TournamentMatchImportRow {
   localTeam: string;
   visitTeam: string;
   timeGame: string;
+  court: string;
   scheduledAt: string | null;
   lineNumber: number;
 }

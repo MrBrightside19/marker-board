@@ -1,4 +1,5 @@
 import type { TournamentMatchImportRow } from "../types/tournament";
+import { normalizeCourt } from "./court";
 
 export const TOURNAMENT_CSV_TEMPLATE_FILE = "plantilla-partidos-torneo.csv";
 
@@ -115,7 +116,7 @@ export function parseTournamentCsv(content: string): {
         {
           line: 1,
           message:
-            "Encabezado invalido. Columnas requeridas: local, visita, tiempo_juego (opcional: fecha_programada)",
+            "Encabezado invalido. Columnas requeridas: local, visita, tiempo_juego (opcional: cancha, fecha_programada)",
         },
       ],
     };
@@ -145,6 +146,12 @@ export function parseTournamentCsv(content: string): {
         "time_game",
         "duracion",
       ]);
+      const courtRaw = pickCell(cells, headerIndex, [
+        "cancha",
+        "court",
+        "pista",
+        "field",
+      ]);
       const dateRaw = pickCell(cells, headerIndex, [
         "fecha_programada",
         "fecha_hora",
@@ -160,6 +167,7 @@ export function parseTournamentCsv(content: string): {
         localTeam,
         visitTeam,
         timeGame: normalizeTimeGame(timeRaw),
+        court: normalizeCourt(courtRaw),
         scheduledAt: parseScheduledAt(dateRaw),
         lineNumber,
       });

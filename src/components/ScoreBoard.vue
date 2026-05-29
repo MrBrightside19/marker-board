@@ -63,20 +63,17 @@ import { computed, ref, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
-import {
-  readScoreboardStateFromLocalStorage,
-  useScoreboardStore,
-} from "../stores/scoreboard";
+import { useScoreboardStore } from "../stores/scoreboard";
 import {
   fetchMatchState,
   isRemoteSyncEnabled,
-  publishMatchState,
 } from "../services/matchSync";
 import { getPollIntervalMs } from "../config/sync";
 import {
   ACTIVE_MATCH_STORAGE_KEY,
   getPublicLiveUrl,
   resolveActiveMatchId,
+  setActiveMatchId,
 } from "../utils/activeMatch";
 import {
   isControlsActiveWriter,
@@ -97,7 +94,6 @@ const remoteSyncEnabled = isRemoteSyncEnabled();
 const publicUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
-let publishTimeout: number | null = null;
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;
 const nowMs = ref(Date.now());
@@ -117,7 +113,34 @@ const openControlsInNewTab = () => {
   window.open(routeLocation.href, "controlsWindow", features);
 };
 
+/** Sincronización desde Controles (misma PC): goles/equipos sin recalcular reloj. */
+const syncFromControlsWriter = () => {
+  scoreboardStore.hydrateFromLocalStorage();
+  const snapshot = scoreboardStore.state;
+  localTeam.value = snapshot.localTeam;
+  visitTeam.value = snapshot.visitTeam;
+  goalLocal.value = snapshot.goalLocal;
+  goalVisit.value = snapshot.goalVisit;
+  gamePeriod.value = snapshot.gamePeriod;
+  isPaused.value = snapshot.isPaused;
+  timeString.value = snapshot.timeGame;
+  penaltyString.value = snapshot.penaltyGame;
+  formattedTime.value = snapshot.timeGame;
+  formattedPenalty.value = snapshot.penaltyGame;
+  timeMilliseconds.value = convertToMilliseconds(snapshot.timeGame);
+  penaltyMilliseconds.value = convertToMilliseconds(snapshot.penaltyGame);
+  if (parseTimeToMs(snapshot.timeGame) > 0) {
+    showTimeEndedAlert.value = false;
+  }
+  syncPenalizedFlags();
+};
+
 const syncLocalRefsFromStorage = () => {
+  if (isControlsActiveWriter()) {
+    syncFromControlsWriter();
+    return;
+  }
+
   scoreboardStore.hydrateFromLocalStorage();
   const snapshot = scoreboardStore.state;
   localTeam.value = snapshot.localTeam;
@@ -127,12 +150,7 @@ const syncLocalRefsFromStorage = () => {
   gamePeriod.value = snapshot.gamePeriod;
   isPaused.value = snapshot.isPaused;
 
-  if (
-    !isPaused.value &&
-    snapshot.updatedAt &&
-    !isControlsActiveWriter() &&
-    remoteSyncEnabled
-  ) {
+  if (!isPaused.value && snapshot.updatedAt && remoteSyncEnabled) {
     const clocks = getRunningClocks(snapshot, nowMs.value);
     timeString.value = clocks.timeGame;
     penaltyString.value = clocks.penaltyGame;
@@ -157,8 +175,9 @@ const onGameTimeEnded = () => {
   showTimeEndedAlert.value = true;
 };
 
+/** Solo modo sin Supabase: el TV corre el reloj localmente. Con remoto, solo Controles escribe. */
 const tickScoreboardWhenStandalone = () => {
-  if (isPaused.value || isControlsActiveWriter()) return;
+  if (remoteSyncEnabled || isPaused.value || isControlsActiveWriter()) return;
 
   const previousTimeMs = timeMilliseconds.value;
   const currentTimeMs = Math.max(0, timeMilliseconds.value - 1000);
@@ -173,18 +192,16 @@ const tickScoreboardWhenStandalone = () => {
   formattedPenalty.value = nextPenalty;
 
   handleGameTimeTick(previousTimeMs, currentTimeMs, isPaused.value);
-
-  scheduleRemotePublish();
 };
 
 const onScoreboardSync = () => {
   syncLocalRefsFromStorage();
-  syncPenalizedFlags();
 };
 
 const applyMatchId = (matchId: string) => {
   if (!matchId || matchId === activeMatchId.value) return;
   activeMatchId.value = matchId;
+  setActiveMatchId(matchId);
   router.replace({ path: "/board", query: { matchId } });
   scoreboardStore.hydrateFromLocalStorage();
   onScoreboardSync();
@@ -193,19 +210,6 @@ const applyMatchId = (matchId: string) => {
 const onMatchChanged = (event: Event) => {
   const matchId = (event as CustomEvent<{ matchId: string }>).detail?.matchId;
   if (matchId) applyMatchId(matchId);
-};
-
-const scheduleRemotePublish = () => {
-  if (!isRemoteSyncEnabled() || !activeMatchId.value) return;
-  if (publishTimeout) {
-    window.clearTimeout(publishTimeout);
-  }
-  publishTimeout = window.setTimeout(() => {
-    scoreboardStore.setState(readScoreboardStateFromLocalStorage(), false);
-    publishMatchState(activeMatchId.value, scoreboardStore.state, {
-      title: `${scoreboardStore.state.localTeam} vs ${scoreboardStore.state.visitTeam}`,
-    });
-  }, 120);
 };
 
 const localTeam = ref(localStorage.getItem("local-team") || "Equipo Local");
@@ -268,7 +272,9 @@ const syncWithStorage = (event: StorageEvent) => {
     event.key === "time-game" ||
     event.key === "penalty-game" ||
     event.key === "scoreboard-updated-at" ||
-    event.key === "isPaused"
+    event.key === "isPaused" ||
+    event.key === "goal-local" ||
+    event.key === "goal-visit"
   ) {
     onScoreboardSync();
   }
@@ -283,7 +289,7 @@ const syncWithStorage = (event: StorageEvent) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   document.title = "Marcador";
 
   const matchId = resolveActiveMatchId(
@@ -297,6 +303,23 @@ onMounted(() => {
   scoreboardStore.hydrateFromLocalStorage();
   syncLocalRefsFromStorage();
 
+  if (remoteSyncEnabled && activeMatchId.value) {
+    const remoteState = await fetchMatchState(activeMatchId.value);
+    if (remoteState && isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)) {
+      scoreboardStore.setState(remoteState);
+      onScoreboardSync();
+    }
+
+    pollInterval = window.setInterval(async () => {
+      if (isControlsActiveWriter() || !activeMatchId.value) return;
+      const remote = await fetchMatchState(activeMatchId.value);
+      if (remote && isRemoteStateNewer(remote, scoreboardStore.state.updatedAt)) {
+        scoreboardStore.setState(remote);
+        onScoreboardSync();
+      }
+    }, pollIntervalMs);
+  }
+
   window.addEventListener("storage", updateGoalLocal);
   window.addEventListener("storage", updateGoalVisit);
   window.addEventListener("storage", updateGamePeriod);
@@ -308,40 +331,17 @@ onMounted(() => {
   displayInterval = window.setInterval(() => {
     nowMs.value = Date.now();
     if (isControlsActiveWriter()) {
-      syncLocalRefsFromStorage();
-    } else {
+      syncFromControlsWriter();
+    } else if (!remoteSyncEnabled) {
       tickScoreboardWhenStandalone();
+    } else {
+      syncLocalRefsFromStorage();
     }
   }, 1000);
-  updateGoalLocal(); // Actualiza el valor inicial al montar la vista
+  updateGoalLocal();
   updateGoalVisit();
   updateGamePeriod();
   syncPenalizedFlags();
-
-  const applyRemoteState = (remoteState: NonNullable<Awaited<ReturnType<typeof fetchMatchState>>>) => {
-    if (isControlsActiveWriter()) return;
-    const localUpdatedAt = scoreboardStore.state.updatedAt;
-    if (!isRemoteStateNewer(remoteState, localUpdatedAt)) {
-      return;
-    }
-    scoreboardStore.setState(remoteState);
-    onScoreboardSync();
-  };
-
-  if (isRemoteSyncEnabled() && activeMatchId.value) {
-    fetchMatchState(activeMatchId.value).then((remoteState) => {
-      if (!remoteState) {
-        scheduleRemotePublish();
-        return;
-      }
-      applyRemoteState(remoteState);
-    });
-
-    pollInterval = window.setInterval(async () => {
-      const remoteState = await fetchMatchState(activeMatchId.value);
-      if (remoteState) applyRemoteState(remoteState);
-    }, pollIntervalMs);
-  }
 });
 
 onUnmounted(() => {
@@ -356,9 +356,6 @@ onUnmounted(() => {
   window.removeEventListener("storage", updateGoalVisit);
   window.removeEventListener("storage", updateGamePeriod);
   window.removeEventListener("storage", syncPenalizedFlags);
-  if (publishTimeout) {
-    window.clearTimeout(publishTimeout);
-  }
   if (pollInterval) {
     window.clearInterval(pollInterval);
   }

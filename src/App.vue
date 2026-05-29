@@ -1,11 +1,22 @@
 <template>
   <ConfigProvider>
+    <AppNav v-if="showMainNav" />
     <RouterView />
   </ConfigProvider>
 </template>
 
 <script setup lang="ts">
-import { ConfigProvider } from 'ant-design-vue'
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { ConfigProvider } from "ant-design-vue";
+import AppNav from "./components/layout/AppNav.vue";
+
+const route = useRoute();
+
+const showMainNav = computed(() => {
+  const name = route.name?.toString() ?? "";
+  return !["board", "controls", "live"].includes(name);
+});
 </script>
 
 

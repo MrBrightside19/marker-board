@@ -11,6 +11,7 @@ import type {
   TournamentWithMatches,
 } from "../types/tournament";
 import { createMatchId } from "../utils/activeMatch";
+import { normalizeCourt } from "../utils/court";
 import { getSupabase } from "./supabaseClient";
 import { registerMatchRecord } from "./liveMatchesService";
 
@@ -21,6 +22,7 @@ type TournamentRow = {
   start_date: string;
   end_date: string;
   status?: string;
+  live_match_id?: string | null;
   created_at: string;
 };
 
@@ -33,6 +35,7 @@ type TournamentMatchRow = {
   visit_team: string;
   time_game: string;
   match_id: string | null;
+  court?: string;
   status: string;
   goal_local?: number | null;
   goal_visit?: number | null;
@@ -47,6 +50,7 @@ function mapTournament(row: TournamentRow): Tournament {
     startDate: row.start_date,
     endDate: row.end_date,
     status: (row.status === "finished" ? "finished" : "active") as Tournament["status"],
+    liveMatchId: row.live_match_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -61,6 +65,7 @@ function mapTournamentMatch(row: TournamentMatchRow): TournamentMatch {
     visitTeam: row.visit_team,
     timeGame: row.time_game,
     matchId: row.match_id,
+    court: normalizeCourt(row.court ?? "1"),
     status: row.status as TournamentMatch["status"],
     goalLocal: row.goal_local ?? null,
     goalVisit: row.goal_visit ?? null,
@@ -188,6 +193,7 @@ export async function bulkImportTournamentMatches(
     local_team: row.localTeam,
     visit_team: row.visitTeam,
     time_game: row.timeGame,
+    court: row.court,
     match_id: null,
     status: "scheduled",
   }));
@@ -202,29 +208,71 @@ export async function bulkImportTournamentMatches(
 }
 
 export type TournamentControlsContext = {
-  tournament: Tournament;
+  tournament: TournamentWithMatches;
+  court: string;
   currentMatch: TournamentMatch | null;
   upcomingMatches: TournamentMatch[];
 };
 
 function buildTournamentControlsContext(
   tournamentData: TournamentWithMatches,
-  matchId: string
+  matchId: string,
+  courtHint?: string
 ): TournamentControlsContext {
+  const courtKey = normalizeCourt(courtHint ?? "1");
+
+  let currentMatch =
+    tournamentData.matches.find((m) => m.matchId === matchId) ?? null;
+
+  if (!currentMatch) {
+    const liveOnCourt = tournamentData.matches.filter(
+      (m) => m.status === "live" && normalizeCourt(m.court) === courtKey
+    );
+    currentMatch =
+      liveOnCourt.find((m) => m.matchId === matchId) ?? liveOnCourt[0] ?? null;
+  }
+
+  const court = currentMatch?.court ?? courtKey;
+
   return {
     tournament: tournamentData,
-    currentMatch: tournamentData.matches.find((m) => m.matchId === matchId) ?? null,
-    upcomingMatches: tournamentData.matches.filter((m) => m.status === "scheduled"),
+    court,
+    currentMatch,
+    upcomingMatches: tournamentData.matches.filter(
+      (m) => m.status === "scheduled" && normalizeCourt(m.court) === court
+    ),
   };
+}
+
+/** Canchas distintas definidas en el calendario del torneo. */
+export async function fetchTournamentCourts(tournamentId: string): Promise<string[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("tournament_matches")
+    .select("court")
+    .eq("tournament_id", tournamentId);
+
+  if (error) {
+    console.error("[tournaments] courts", error.message);
+    return [];
+  }
+
+  const courts = new Set(
+    (data as { court: string | null }[]).map((r) => normalizeCourt(r.court ?? "1"))
+  );
+  return [...courts].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
 }
 
 export async function fetchTournamentControlsContextByTournamentId(
   tournamentId: string,
-  matchId: string
+  matchId: string,
+  courtHint?: string
 ): Promise<TournamentControlsContext | null> {
   const tournamentData = await fetchTournamentWithMatches(tournamentId);
   if (!tournamentData) return null;
-  return buildTournamentControlsContext(tournamentData, matchId);
+  return buildTournamentControlsContext(tournamentData, matchId, courtHint);
 }
 
 export async function fetchTournamentControlsContext(
@@ -235,7 +283,7 @@ export async function fetchTournamentControlsContext(
 
   const { data: matchRow, error: matchError } = await supabase
     .from("matches")
-    .select("tournament_id")
+    .select("tournament_id, court")
     .eq("id", matchId)
     .maybeSingle();
 
@@ -244,14 +292,16 @@ export async function fetchTournamentControlsContext(
   }
 
   let tournamentId = (matchRow?.tournament_id as string | null) ?? null;
+  let courtHint = (matchRow?.court as string | null) ?? undefined;
 
   if (!tournamentId) {
     const { data: tmRow } = await supabase
       .from("tournament_matches")
-      .select("tournament_id")
+      .select("tournament_id, court")
       .eq("match_id", matchId)
       .maybeSingle();
     tournamentId = (tmRow?.tournament_id as string | null) ?? null;
+    courtHint = courtHint ?? (tmRow?.court as string | null) ?? undefined;
   }
 
   if (!tournamentId) return null;
@@ -259,7 +309,7 @@ export async function fetchTournamentControlsContext(
   const tournamentData = await fetchTournamentWithMatches(tournamentId);
   if (!tournamentData) return null;
 
-  return buildTournamentControlsContext(tournamentData, matchId);
+  return buildTournamentControlsContext(tournamentData, matchId, courtHint);
 }
 
 export async function finishTournamentMatch(
@@ -525,7 +575,7 @@ export async function fetchFinishedTournamentDetail(
 export async function startTournamentMatch(
   tournamentMatchId: string,
   organizerId: string
-): Promise<{ matchId: string }> {
+): Promise<{ matchId: string; tournamentId: string; court: string }> {
   const supabase = getSupabase();
   if (!supabase) throw new Error("Supabase no configurado");
 
@@ -541,6 +591,7 @@ export async function startTournamentMatch(
 
   const matchRow = row as TournamentMatchRow;
   const matchId = matchRow.match_id || createMatchId();
+  const court = normalizeCourt(matchRow.court ?? "1");
 
   const state = createFreshMatchState({
     localTeam: matchRow.local_team,
@@ -548,13 +599,18 @@ export async function startTournamentMatch(
     timeGame: matchRow.time_game,
   });
 
-  await registerMatchRecord({
+  const saved = await registerMatchRecord({
     matchId,
     state,
     organizerId,
     title: `${matchRow.local_team} vs ${matchRow.visit_team}`,
     tournamentId: matchRow.tournament_id,
+    isLive: true,
   });
+
+  if (!saved) {
+    throw new Error("No se pudo registrar el partido en el servidor");
+  }
 
   const { error: updateError } = await supabase
     .from("tournament_matches")
@@ -565,5 +621,5 @@ export async function startTournamentMatch(
     throw new Error(updateError.message);
   }
 
-  return { matchId };
+  return { matchId, tournamentId: matchRow.tournament_id, court };
 }

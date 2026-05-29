@@ -1,5 +1,6 @@
 export const ACTIVE_MATCH_STORAGE_KEY = "active-match-id";
 export const ACTIVE_TOURNAMENT_STORAGE_KEY = "active-tournament-id";
+export const ACTIVE_COURT_STORAGE_KEY = "active-court";
 const STORAGE_KEY = ACTIVE_MATCH_STORAGE_KEY;
 
 export function createMatchId(): string {
@@ -29,6 +30,10 @@ export function setActiveMatchId(matchId: string): void {
   localStorage.setItem(STORAGE_KEY, matchId.trim());
 }
 
+export function getStoredActiveMatchId(): string | null {
+  return localStorage.getItem(STORAGE_KEY)?.trim() || null;
+}
+
 export function getActiveTournamentId(): string | null {
   return localStorage.getItem(ACTIVE_TOURNAMENT_STORAGE_KEY)?.trim() || null;
 }
@@ -41,8 +46,31 @@ export function setActiveTournamentId(tournamentId: string | null): void {
   }
 }
 
-export function getPublicLiveUrl(matchId: string): string {
+function buildAppUrl(pathSegment: string): string {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const path = `${base}/live/${matchId}`.replace(/^\/\//, "/");
+  const path = `${base}${pathSegment}`.replace(/^\/\//, "/");
   return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Live publico de un partido suelto (sin torneo). */
+export function getPublicLiveUrl(matchId: string): string {
+  return buildAppUrl(`/live/${matchId}`);
+}
+
+/** Live publico fijo por cancha del torneo. */
+export function getTournamentLiveUrl(tournamentId: string, court = "1"): string {
+  const courtSlug = court.trim() || "1";
+  return buildAppUrl(`/live/torneo/${tournamentId}/${encodeURIComponent(courtSlug)}`);
+}
+
+export function getActiveCourt(): string | null {
+  return localStorage.getItem(ACTIVE_COURT_STORAGE_KEY)?.trim() || null;
+}
+
+export function setActiveCourt(court: string | null): void {
+  if (court?.trim()) {
+    localStorage.setItem(ACTIVE_COURT_STORAGE_KEY, court.trim());
+  } else {
+    localStorage.removeItem(ACTIVE_COURT_STORAGE_KEY);
+  }
 }

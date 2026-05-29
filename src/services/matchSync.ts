@@ -32,7 +32,10 @@ export async function publishMatchState(
     record.isLive = options.isLive;
   }
 
-  await registerMatchRecord(record);
+  const ok = await registerMatchRecord(record);
+  if (!ok) {
+    throw new Error("No se pudo guardar el marcador en el servidor");
+  }
 }
 
 export async function fetchMatchState(matchId: string): Promise<ScoreboardState | null> {
