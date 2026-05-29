@@ -1,4 +1,5 @@
 export const ACTIVE_MATCH_STORAGE_KEY = "active-match-id";
+export const ACTIVE_TOURNAMENT_STORAGE_KEY = "active-tournament-id";
 const STORAGE_KEY = ACTIVE_MATCH_STORAGE_KEY;
 
 export function createMatchId(): string {
@@ -26,6 +27,18 @@ export function resolveActiveMatchId(fromQuery?: string | null): string {
 
 export function setActiveMatchId(matchId: string): void {
   localStorage.setItem(STORAGE_KEY, matchId.trim());
+}
+
+export function getActiveTournamentId(): string | null {
+  return localStorage.getItem(ACTIVE_TOURNAMENT_STORAGE_KEY)?.trim() || null;
+}
+
+export function setActiveTournamentId(tournamentId: string | null): void {
+  if (tournamentId?.trim()) {
+    localStorage.setItem(ACTIVE_TOURNAMENT_STORAGE_KEY, tournamentId.trim());
+  } else {
+    localStorage.removeItem(ACTIVE_TOURNAMENT_STORAGE_KEY);
+  }
 }
 
 export function getPublicLiveUrl(matchId: string): string {

@@ -1,9 +1,12 @@
 <template>
 
   <div class="scoreboard-container font-digital">
-    <div v-if="activeMatchId && remoteSyncEnabled" class="session-bar">
-      <span class="session-label">Partido: {{ activeMatchId }}</span>
-      <a class="session-link" :href="publicUrl" target="_blank" rel="noopener">Live público</a>
+    <div class="session-bar">
+      <router-link to="/" class="session-link">Inicio</router-link>
+      <template v-if="activeMatchId && remoteSyncEnabled">
+        <span class="session-label">Partido: {{ activeMatchId }}</span>
+        <a class="session-link" :href="publicUrl" target="_blank" rel="noopener">Live público</a>
+      </template>
     </div>
 
     <a-button
@@ -182,7 +185,7 @@ const onScoreboardSync = () => {
 const applyMatchId = (matchId: string) => {
   if (!matchId || matchId === activeMatchId.value) return;
   activeMatchId.value = matchId;
-  router.replace({ path: "/", query: { matchId } });
+  router.replace({ path: "/board", query: { matchId } });
   scoreboardStore.hydrateFromLocalStorage();
   onScoreboardSync();
 };
@@ -199,7 +202,9 @@ const scheduleRemotePublish = () => {
   }
   publishTimeout = window.setTimeout(() => {
     scoreboardStore.setState(readScoreboardStateFromLocalStorage(), false);
-    publishMatchState(activeMatchId.value, scoreboardStore.state);
+    publishMatchState(activeMatchId.value, scoreboardStore.state, {
+      title: `${scoreboardStore.state.localTeam} vs ${scoreboardStore.state.visitTeam}`,
+    });
   }, 120);
 };
 
@@ -286,7 +291,7 @@ onMounted(() => {
   );
   activeMatchId.value = matchId;
   if (route.query.matchId !== matchId) {
-    router.replace({ path: "/", query: { matchId } });
+    router.replace({ path: "/board", query: { matchId } });
   }
 
   scoreboardStore.hydrateFromLocalStorage();
@@ -314,6 +319,7 @@ onMounted(() => {
   syncPenalizedFlags();
 
   const applyRemoteState = (remoteState: NonNullable<Awaited<ReturnType<typeof fetchMatchState>>>) => {
+    if (isControlsActiveWriter()) return;
     const localUpdatedAt = scoreboardStore.state.updatedAt;
     if (!isRemoteStateNewer(remoteState, localUpdatedAt)) {
       return;

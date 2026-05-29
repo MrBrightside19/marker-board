@@ -1,99 +1,84 @@
 <template>
-  <div class="controls">
-    <router-link
-      :to="{ path: '/', query: { matchId: activeMatchId } }"
-      class="nav-button"
-    >
-      <a-button
-        type="default"
-        size="large"
-        style="position: absolute; top: 20px; left: 20px; z-index: 1000"
-      >
-        ← Volver al Marcador
-      </a-button>
-    </router-link>
-
-    <a-flex class="separator" justify="space-between" align="center">
-      <div class="team-goals-column">
-        <h1>
-          Local
-
-          <a-input
-            style="width: 220px"
-            v-model:value="local"
-            size="large"
-            placeholder="Nombre equipo local"
-          />
-
-          Marcador: {{ localGoals }}
-        </h1>
-
-        <div class="goal-buttons">
-          <a-button
-            class="control-button"
-            size="large"
-            type="primary"
-            @click="changeGoalLocal(+1)"
-            >Sumar Gol
-          </a-button>
-          <a-button
-            class="control-button"
-            size="large"
-            type="primary"
-            @click="changeGoalLocal(-1)"
-            >Restar Gol
-          </a-button>
+  <div class="controls-page" :class="{ 'has-tournament': isTournamentMode }">
+    <section class="controls-panel">
+      <div class="controls-toolbar">
+        <div v-if="activeMatchId && remoteSyncEnabled" class="match-panel-info">
+          <span v-if="tournamentContext">
+            <strong>{{ tournamentContext.tournament.name }}</strong>
+            <span v-if="tournamentContext.currentMatch">
+              · {{ tournamentContext.currentMatch.localTeam }} vs
+              {{ tournamentContext.currentMatch.visitTeam }}
+            </span>
+          </span>
+          <span v-else><strong>Partido:</strong> {{ activeMatchId }}</span>
+          <a class="live-link" :href="publicUrl" target="_blank" rel="noopener">Live</a>
         </div>
-        <div class="penalty-toggle">
+        <a-button
+          type="primary"
+          :danger="!isTournamentMode"
+          size="small"
+          :loading="advancingMatch"
+          :disabled="isTournamentMode && !hasUpcomingMatch"
+          @click="onAdvanceMatch"
+        >
+          {{ advanceMatchLabel }}
+        </a-button>
+      </div>
+
+      <a-flex class="separator controls-row" justify="space-between" align="center">
+        <div class="team-goals-column">
+          <div class="team-block">
+            <span class="team-label">Local</span>
+            <a-input
+              v-model:value="local"
+              class="team-name-input"
+              size="small"
+              placeholder="Equipo local"
+            />
+            <span class="score-label">Marcador: {{ localGoals }}</span>
+          </div>
+          <div class="goal-buttons">
+            <a-button class="control-button" type="primary" @click="changeGoalLocal(+1)">
+              + Gol
+            </a-button>
+            <a-button class="control-button" type="primary" @click="changeGoalLocal(-1)">
+              − Gol
+            </a-button>
+          </div>
           <a-button
             class="penalty-button"
+            size="small"
             :type="penalizedLocal ? 'primary' : 'default'"
             @click="togglePenalizedLocal"
           >
             Penalidad
           </a-button>
         </div>
-      </div>
-      <a-divider
-        type="vertical"
-        style="height: 300px; background-color: black; width: 10px; top: 0"
-      />
 
-      <div class="team-goals-column">
-        <h1>
-          Visita
+        <a-divider type="vertical" class="row-divider" />
 
-          <a-input
-            style="width: 220px"
-            v-model:value="visit"
-            size="large"
-            placeholder="Nombre equipo visita"
-          />
-          Marcador: {{ visitGoals }}
-        </h1>
-        <div class="goal-buttons">
-          <a-button
-            class="control-button"
-            size="large"
-            type="primary"
-            danger
-            @click="changeGoalVisit(+1)"
-          >
-            Sumar Gol
-          </a-button>
-          <a-button
-            class="control-button"
-            size="large"
-            type="primary"
-            danger
-            @click="changeGoalVisit(-1)"
-          >
-            Restar Gol
-          </a-button>
-        </div>
-        <div class="penalty-toggle">
+        <div class="team-goals-column">
+          <div class="team-block">
+            <span class="team-label">Visita</span>
+            <a-input
+              v-model:value="visit"
+              class="team-name-input"
+              size="small"
+              placeholder="Equipo visita"
+            />
+            <span class="score-label">Marcador: {{ visitGoals }}</span>
+          </div>
+          <div class="goal-buttons">
+            <a-button class="control-button" type="primary" danger @click="changeGoalVisit(+1)">
+              + Gol
+            </a-button>
+            <a-button class="control-button" type="primary" danger @click="changeGoalVisit(-1)">
+              − Gol
+            </a-button>
+          </div>
           <a-button
             class="penalty-button"
+            size="small"
             danger
             :type="penalizedVisit ? 'primary' : 'default'"
             @click="togglePenalizedVisit"
@@ -101,113 +86,121 @@
             Penalidad
           </a-button>
         </div>
-      </div>
-    </a-flex>
+      </a-flex>
 
-    <a-flex class="separator" justify="space-between" align="flex-end">
-      <div style="text-align: center">
-        <a-button class="control-button-2" size="large" @click="changePeriod">
-          Cambiar periodo</a-button>
-        <h1 style="margin-top: 10px; font-size: 40px">{{ gamePeriod }}</h1>
-      </div>
-      <a-divider
-        type="vertical"
-        style="height: 300px; background-color: black; width: 10px; top: 0"
-      />
+      <a-flex class="separator controls-row" justify="space-between" align="center">
+        <div class="clock-block">
+          <a-button class="control-button-2" size="small" @click="changePeriod">
+            Cambiar periodo
+          </a-button>
+          <div class="clock-value">{{ gamePeriod }}</div>
+        </div>
 
-      <div style="text-align: center">
-        <a-select
-          class="time-select"
-          size="large"
-          ref="select"
-          v-model:value="selectedTime"
-          style="width: 220px"
-          :options="optionsTime"
-        ></a-select>
-        <a-button class="control-button-2" size="large" @click="resetTime">
-          Resetear tiempo</a-button
+        <a-divider type="vertical" class="row-divider" />
+
+        <div class="clock-block">
+          <div class="game-time-input">
+            <a-input
+              v-model:value="gameMinutesInput"
+              class="time-minutes-input"
+              size="small"
+              inputmode="numeric"
+              maxlength="3"
+              @input="onGameMinutesInput"
+              @blur="normalizeGameMinutes"
+            />
+            <span class="time-minutes-label">minutos</span>
+          </div>
+          <a-button class="control-button-2" size="small" @click="resetTime">
+            Resetear tiempo
+          </a-button>
+          <div class="adjust-buttons">
+            <a-button size="small" @click="adjustGameTime(10)">+10 s</a-button>
+            <a-button size="small" @click="adjustGameTime(5)">+5 s</a-button>
+            <a-button size="small" @click="adjustGameTime(-5)">−5 s</a-button>
+            <a-button size="small" @click="adjustGameTime(-10)">−10 s</a-button>
+          </div>
+          <div class="clock-value game-clock-display" :class="{ 'time-ended': showTimeEndedAlert }">
+            {{ formattedTime }}
+          </div>
+        </div>
+
+        <a-button
+          class="pause-button"
+          :danger="!isPaused"
+          type="primary"
+          size="small"
+          @click="togglePause"
         >
-        <div style="margin-top: 8px">
-          <a-button size="small" @click="adjustGameTime(10)">+10 s</a-button>
-          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(5)"
-            >+5 s</a-button
-          >
-          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(-5)"
-            >-5 s</a-button
-          >
-          <a-button size="small" style="margin-left: 6px" @click="adjustGameTime(-10)"
-            >-10 s</a-button
-          >
-        </div>
-        <h1
-          class="game-clock-display"
-          :class="{ 'time-ended': showTimeEndedAlert }"
-          style="margin-top: 10px; font-size: 40px"
-        >
-          {{ formattedTime }}
-        </h1>
-      </div>
+          {{ isPaused ? "Continuar" : "Pausar" }}
+        </a-button>
 
-      <a-button
-        :danger="!isPaused"
-        type="primary"
-        style="
-          min-width: 150px;
-          height: 80px;
-          font-size: 28px;
-          align-self: center;
-        "
-        size="large"
-        @click="togglePause"
-      >
-        {{ isPaused ? "Continuar" : "Pausar" }}</a-button
-      >
+        <div class="clock-block">
+          <a-select
+            v-model:value="selectedPenalty"
+            class="time-select"
+            size="small"
+            style="width: 140px"
+            :options="optionsPenalty"
+          />
+          <a-button class="control-button-2" size="small" @click="resetPenalty">
+            Reset penalidad
+          </a-button>
+          <div class="adjust-buttons">
+            <a-button size="small" @click="adjustPenaltyTime(10)">+10 s</a-button>
+            <a-button size="small" @click="adjustPenaltyTime(5)">+5 s</a-button>
+            <a-button size="small" @click="adjustPenaltyTime(-5)">−5 s</a-button>
+            <a-button size="small" @click="adjustPenaltyTime(-10)">−10 s</a-button>
+          </div>
+          <div class="clock-value">{{ formattedPenalty }}</div>
+        </div>
+      </a-flex>
+    </section>
 
-      <div style="text-align: center">
-        <a-select
-          size="large"
-          class="time-select"
-          ref="select"
-          v-model:value="selectedPenalty"
-          style="width: 220px"
-          :options="optionsPenalty"
-        ></a-select>
-        <a-button class="control-button-2" size="large" @click="resetPenalty">
-          Resetear Penalidad</a-button>
-        <div style="margin-top: 8px">
-          <a-button size="small" @click="adjustPenaltyTime(10)">+10 s</a-button>
-          <a-button size="small" style="margin-left: 6px" @click="adjustPenaltyTime(5)"
-            >+5 s</a-button
-          >
-          <a-button size="small" style="margin-left: 6px" @click="adjustPenaltyTime(-5)"
-            >-5 s</a-button
-          >
-          <a-button size="small" style="margin-left: 6px" @click="adjustPenaltyTime(-10)"
-            >-10 s</a-button
-          >
-        </div>
-        <h1 style="margin-top: 10px; font-size: 40px">{{ formattedPenalty }}</h1>
-      </div>
-    </a-flex>
-    <div class="match-panel">
-      <div v-if="activeMatchId && remoteSyncEnabled" class="match-panel-info">
-        <div><strong>Partido activo:</strong> {{ activeMatchId }}</div>
-        <div style="margin-top: 6px">
-          <strong>URL publica (live):</strong>
-          <a style="margin-left: 8px" :href="publicUrl" target="_blank">{{ publicUrl }}</a>
-        </div>
-      </div>
-      <a-button type="primary" danger size="large" @click="startNewMatch">
-        Nuevo partido
-      </a-button>
-    </div>
+    <section v-if="isTournamentMode" class="upcoming-panel">
+      <h2 class="upcoming-title">
+        Siguientes partidos
+        <span class="upcoming-count">({{ tournamentContext?.upcomingMatches.length ?? 0 }})</span>
+      </h2>
+      <a-table
+        :data-source="tournamentContext?.upcomingMatches ?? []"
+        :columns="upcomingColumns"
+        row-key="id"
+        size="small"
+        :pagination="false"
+        :loading="loadingTournament"
+        :scroll="{ y: 'calc(50vh - 72px)' }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'scheduledAt'">
+            {{ record.scheduledAt ? formatScheduledAt(record.scheduledAt) : "—" }}
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <a-button
+              type="link"
+              size="small"
+              :loading="advancingMatch && startingMatchId === record.id"
+              @click="startScheduledTournamentMatch(record)"
+            >
+              Iniciar
+            </a-button>
+          </template>
+        </template>
+        <template #emptyText>
+          <a-empty description="No quedan partidos programados" />
+        </template>
+      </a-table>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { message } from "ant-design-vue";
+import dayjs from "dayjs";
 import {
+  buildFinishedMatchState,
   createFreshMatchState,
   normalizeScoreboardState,
   useScoreboardStore,
@@ -217,11 +210,14 @@ import {
   isRemoteSyncEnabled,
   publishMatchState,
 } from "../services/matchSync";
+import { setMatchLiveStatus } from "../services/liveMatchesService";
 import {
   createMatchId,
+  getActiveTournamentId,
   getPublicLiveUrl,
   resolveActiveMatchId,
   setActiveMatchId,
+  setActiveTournamentId,
 } from "../utils/activeMatch";
 import {
   GAME_TIME_ENDED_EVENT,
@@ -237,68 +233,170 @@ import {
   releaseControlsWriter,
   touchControlsWriterHeartbeat,
 } from "../utils/scoreboardSync";
+import { useAuthStore } from "../stores/auth";
+import type { TournamentMatch } from "../types/tournament";
+import {
+  fetchTournamentControlsContext,
+  fetchTournamentControlsContextByTournamentId,
+  finishTournamentMatch,
+  startTournamentMatch,
+  type TournamentControlsContext,
+} from "../services/tournamentService";
 
 const local = ref(localStorage.getItem("local-team") || "");
 const visit = ref(localStorage.getItem("visit-team") || "");
-const selectedTime = ref("20:00");
+const gameMinutesInput = ref("20");
 const selectedPenalty = ref("2:00");
 const gamePeriod = ref(localStorage.getItem("game-period") || "1");
 const localGoals = ref(localStorage.getItem("goal-local") || "0");
 const visitGoals = ref(localStorage.getItem("goal-visit") || "0");
 
-const optionsTime = [
-  { value: "25:00", label: "25 minutos" },
-  { value: "20:00", label: "20 minutos" },
-  { value: "15:00", label: "15 minutos" },
-  { value: "10:00", label: "10 minutos" },
-  { value: "5:00", label: "5 minutos" },
-  // { value: "10:00", label: "10 minutos" },
-];
 const optionsPenalty = [
-  { value: "00:00", label: "0 minutos (sin penalidad)" },
+  { value: "00:00", label: "0 min (sin penalidad)" },
   { value: "2:00", label: "2 minutos" },
   { value: "4:00", label: "4 minutos" },
   { value: "5:00", label: "5 minutos" },
   { value: "10:00", label: "10 minutos" },
 ];
 
+const upcomingColumns = [
+  { title: "Local", dataIndex: "localTeam", key: "localTeam", ellipsis: true },
+  { title: "Visita", dataIndex: "visitTeam", key: "visitTeam", ellipsis: true },
+  { title: "Tiempo", dataIndex: "timeGame", key: "timeGame", width: 72 },
+  { title: "Programado", key: "scheduledAt", width: 130 },
+  { title: "", key: "actions", width: 72 },
+];
+
 const penalizedLocal = ref(false);
 const penalizedVisit = ref(false);
-
-// Estado de pausa
 const isPaused = ref(localStorage.getItem("isPaused") === "true");
 const route = useRoute();
 const router = useRouter();
 const scoreboardStore = useScoreboardStore();
+const auth = useAuthStore();
 const activeMatchId = ref("");
 const remoteSyncEnabled = isRemoteSyncEnabled();
+const activeTournamentId = ref<string | null>(getActiveTournamentId());
+const tournamentContext = ref<TournamentControlsContext | null>(null);
+const loadingTournament = ref(false);
+const advancingMatch = ref(false);
+const startingMatchId = ref<string | null>(null);
+
 const publicUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
 
+const isTournamentMode = computed(() => activeTournamentId.value !== null);
+const hasUpcomingMatch = computed(
+  () => (tournamentContext.value?.upcomingMatches.length ?? 0) > 0
+);
+const advanceMatchLabel = computed(() =>
+  isTournamentMode.value ? "Siguiente partido" : "Nuevo partido"
+);
+
+function formatScheduledAt(value: string): string {
+  return dayjs(value).format("DD/MM HH:mm");
+}
+
+function minutesFromTimeGame(time: string): number {
+  return Math.max(0, Math.round(parseTimeToMs(time || "00:00") / 60000));
+}
+
+function minutesToTimeGame(raw: string | number): string {
+  const minutes = Math.max(0, Math.min(120, Math.floor(Number(raw) || 0)));
+  return `${String(minutes).padStart(2, "0")}:00`;
+}
+
+const selectedTime = computed(() => minutesToTimeGame(gameMinutesInput.value));
+
+const onGameMinutesInput = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  gameMinutesInput.value = input.value.replace(/\D/g, "");
+};
+
+const normalizeGameMinutes = () => {
+  if (!gameMinutesInput.value.trim()) {
+    gameMinutesInput.value = "0";
+    return;
+  }
+  gameMinutesInput.value = String(Math.min(120, Number(gameMinutesInput.value) || 0));
+};
+
+const publishOptions = () => {
+  const state = scoreboardStore.state;
+  const opts: {
+    organizerId: string | null;
+    title: string;
+    tournamentId?: string | null;
+  } = {
+    organizerId: auth.userId,
+    title: `${state.localTeam} vs ${state.visitTeam}`,
+  };
+  if (activeTournamentId.value) {
+    opts.tournamentId = activeTournamentId.value;
+  }
+  return opts;
+};
+
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
 
+function clearPendingPublish() {
+  if (publishTimeout) {
+    window.clearTimeout(publishTimeout);
+    publishTimeout = null;
+  }
+}
+
 const scheduleRemotePublish = () => {
-  if (!isRemoteSyncEnabled() || !activeMatchId.value) return;
+  if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
   if (publishTimeout) {
     window.clearTimeout(publishTimeout);
   }
   publishTimeout = window.setTimeout(() => {
     publishTimeout = null;
-    void publishMatchState(activeMatchId.value, scoreboardStore.state);
+    if (advancingMatch.value) return;
+    void publishMatchState(activeMatchId.value, scoreboardStore.state, {
+      ...publishOptions(),
+      isLive: true,
+    });
   }, 120);
 };
 
-/** Publica de inmediato tras cambios manuales de reloj (evita que un poll devuelva el valor anterior). */
 const flushRemotePublish = () => {
-  if (!isRemoteSyncEnabled() || !activeMatchId.value) return;
-  if (publishTimeout) {
-    window.clearTimeout(publishTimeout);
-    publishTimeout = null;
-  }
-  void publishMatchState(activeMatchId.value, scoreboardStore.state);
+  if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
+  clearPendingPublish();
+  void publishMatchState(activeMatchId.value, scoreboardStore.state, {
+    ...publishOptions(),
+    isLive: true,
+  });
 };
+
+async function loadTournamentContext() {
+  if (!remoteSyncEnabled || !activeMatchId.value) {
+    if (!activeTournamentId.value) {
+      tournamentContext.value = null;
+    }
+    return;
+  }
+  loadingTournament.value = true;
+  try {
+    let ctx = await fetchTournamentControlsContext(activeMatchId.value);
+    if (!ctx && activeTournamentId.value) {
+      ctx = await fetchTournamentControlsContextByTournamentId(
+        activeTournamentId.value,
+        activeMatchId.value
+      );
+    }
+    if (ctx) {
+      activeTournamentId.value = ctx.tournament.id;
+      setActiveTournamentId(ctx.tournament.id);
+      tournamentContext.value = ctx;
+    }
+  } finally {
+    loadingTournament.value = false;
+  }
+}
 
 const syncPenalizedFromStorage = () => {
   penalizedLocal.value = localStorage.getItem("penalized-local") === "true";
@@ -314,18 +412,22 @@ const syncPenalizedFromStorage = () => {
 };
 
 const syncUiFromLocalStorage = () => {
-  local.value = localStorage.getItem("local-team") || "";
-  visit.value = localStorage.getItem("visit-team") || "";
-  localGoals.value = localStorage.getItem("goal-local") || "0";
-  visitGoals.value = localStorage.getItem("goal-visit") || "0";
-  gamePeriod.value = localStorage.getItem("game-period") || "1";
-  formattedTime.value = localStorage.getItem("time-game") || "20:00";
-  formattedPenalty.value = localStorage.getItem("penalty-game") || "00:00";
-  isPaused.value = localStorage.getItem("isPaused") === "true";
+  const snapshot = scoreboardStore.state;
+  local.value = snapshot.localTeam;
+  visit.value = snapshot.visitTeam;
+  localGoals.value = String(snapshot.goalLocal);
+  visitGoals.value = String(snapshot.goalVisit);
+  gamePeriod.value = String(snapshot.gamePeriod);
+  formattedTime.value = snapshot.timeGame || "20:00";
+  formattedPenalty.value = snapshot.penaltyGame || "00:00";
+  gameMinutesInput.value = String(minutesFromTimeGame(snapshot.timeGame));
+  isPaused.value = snapshot.isPaused;
   syncPenalizedFromStorage();
 };
 
 const tickTimersFromControls = () => {
+  if (advancingMatch.value) return;
+
   if (isPaused.value) {
     syncUiFromLocalStorage();
     return;
@@ -377,7 +479,6 @@ const clearPenalizedFlags = () => {
   scheduleRemotePublish();
 };
 
-// 🔄 Alternar pausa
 const showTimeEndedAlert = ref(false);
 
 const togglePause = () => {
@@ -387,25 +488,21 @@ const togglePause = () => {
 };
 
 const changeGoalLocal = (value: number) => {
-  const currentValue = Number(localStorage.getItem("goal-local") || 0);
-  localStorage.setItem("goal-local", (currentValue + value).toString());
-  if (currentValue + value < 0) {
-    localStorage.setItem("goal-local", (0).toString());
-  }
-  localGoals.value = localStorage.getItem("goal-local") || "0";
-  scheduleRemotePublish();
+  const next = Math.max(0, scoreboardStore.state.goalLocal + value);
+  scoreboardStore.updatePartial({ goalLocal: next });
+  localGoals.value = String(next);
+  notifyScoreboardSync();
+  flushRemotePublish();
 };
 
 const changeGoalVisit = (value: number) => {
-  const currentValue = Number(localStorage.getItem("goal-visit") || 0);
-  localStorage.setItem("goal-visit", (currentValue + value).toString());
-
-  if (currentValue + value < 0) {
-    localStorage.setItem("goal-visit", (0).toString());
-  }
-  visitGoals.value = localStorage.getItem("goal-visit") || "0";
-  scheduleRemotePublish();
+  const next = Math.max(0, scoreboardStore.state.goalVisit + value);
+  scoreboardStore.updatePartial({ goalVisit: next });
+  visitGoals.value = String(next);
+  notifyScoreboardSync();
+  flushRemotePublish();
 };
+
 const adjustGameTime = (seconds: number) => {
   const currentMs = parseTimeToMs(scoreboardStore.state.timeGame || "20:00");
   const next = formatTime(currentMs + seconds * 1000);
@@ -479,7 +576,7 @@ const changePeriod = () => {
 
   const resetClock = window.confirm(
     `Pasaste al periodo ${nextPeriod}.\n\n` +
-      `¿Resetear el tiempo de juego a ${selectedTime.value}?\n` +
+      `¿Resetear el tiempo de juego a ${selectedTime.value} (${gameMinutesInput.value} minutos)?\n` +
       `(El reloj quedará en pausa hasta que pulses Continuar.)`
   );
 
@@ -507,24 +604,133 @@ const changePeriod = () => {
 };
 
 const resetTime = () => {
-  const confirmReset = window.confirm(
-    "¿Estás seguro de que deseas resetear el tiempo de juego?"
-  );
-  if (confirmReset) {
+  if (window.confirm("¿Resetear el tiempo de juego?")) {
     setGameTime(selectedTime.value);
   }
 };
+
 const resetPenalty = () => {
-  const confirmReset = window.confirm(
-    "¿Estás seguro de que deseas resetear el tiempo de penalidad?"
-  );
-  if (confirmReset) {
+  if (window.confirm("¿Resetear el tiempo de penalidad?")) {
     setPenaltyClock(selectedPenalty.value);
     if (parseTimeToMs(selectedPenalty.value) <= 0) {
       clearPenalizedFlags();
     }
   }
 };
+
+async function finishCurrentTournamentMatchIfNeeded() {
+  const current = tournamentContext.value?.currentMatch;
+  if (!current || !activeMatchId.value) return;
+
+  clearPendingPublish();
+
+  const finishedMatchId = activeMatchId.value;
+  const finishedState = buildFinishedMatchState(scoreboardStore.state);
+
+  scoreboardStore.setState(finishedState);
+  isPaused.value = true;
+  formattedTime.value = "00:00";
+  formattedPenalty.value = "00:00";
+  penalizedLocal.value = false;
+  penalizedVisit.value = false;
+  notifyScoreboardSync();
+
+  await finishTournamentMatch(current.id, finishedState);
+
+  if (remoteSyncEnabled) {
+    await publishMatchState(finishedMatchId, finishedState, {
+      organizerId: auth.userId,
+      title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
+      tournamentId:
+        tournamentContext.value?.tournament.id ?? activeTournamentId.value ?? undefined,
+      isLive: false,
+    });
+  } else {
+    await setMatchLiveStatus(finishedMatchId, false);
+  }
+}
+
+function applyTournamentMatchToControls(scheduled: TournamentMatch, matchId: string) {
+  const freshState = createFreshMatchState({
+    localTeam: scheduled.localTeam,
+    visitTeam: scheduled.visitTeam,
+    timeGame: scheduled.timeGame,
+  });
+
+  setActiveMatchId(matchId);
+  activeMatchId.value = matchId;
+  scoreboardStore.setState(freshState);
+  penalizedLocal.value = false;
+  penalizedVisit.value = false;
+  isPaused.value = true;
+  syncUiFromLocalStorage();
+}
+
+async function activateTournamentMatch(scheduled: TournamentMatch) {
+  if (!auth.userId) {
+    message.warning("Inicia sesión como organizador");
+    return;
+  }
+
+  startingMatchId.value = scheduled.id;
+  clearPendingPublish();
+  advancingMatch.value = true;
+  try {
+    await finishCurrentTournamentMatchIfNeeded();
+
+    activeTournamentId.value = scheduled.tournamentId;
+    setActiveTournamentId(scheduled.tournamentId);
+
+    const { matchId } = await startTournamentMatch(scheduled.id, auth.userId);
+    applyTournamentMatchToControls(scheduled, matchId);
+
+    await router.replace({ path: "/controls", query: { matchId } });
+    notifyScoreboardSync();
+    notifyMatchChanged(matchId);
+
+    if (remoteSyncEnabled) {
+      await publishMatchState(matchId, scoreboardStore.state, {
+        ...publishOptions(),
+        organizerId: auth.userId,
+        isLive: true,
+      });
+    }
+
+    await loadTournamentContext();
+    message.success(`${scheduled.localTeam} vs ${scheduled.visitTeam}`);
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "No se pudo cargar el partido");
+  } finally {
+    advancingMatch.value = false;
+    startingMatchId.value = null;
+  }
+}
+
+async function startScheduledTournamentMatch(scheduled: TournamentMatch) {
+  const confirmed = window.confirm(
+    `¿Iniciar ${scheduled.localTeam} vs ${scheduled.visitTeam}?\n\n` +
+      "El partido actual se marcará como finalizado."
+  );
+  if (!confirmed) return;
+  await activateTournamentMatch(scheduled);
+}
+
+async function startNextTournamentMatch() {
+  const next = tournamentContext.value?.upcomingMatches[0];
+  if (!next) {
+    message.info("No hay más partidos programados en el torneo");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `¿Pasar al siguiente partido?\n\n` +
+      `${next.localTeam} vs ${next.visitTeam} (${next.timeGame})\n\n` +
+      "Se reinician goles, periodo y relojes. El marcador en TV debe actualizar el partido activo."
+  );
+  if (!confirmed) return;
+
+  await activateTournamentMatch(next);
+}
 
 const startNewMatch = async () => {
   const confirmed = window.confirm(
@@ -545,30 +751,41 @@ const startNewMatch = async () => {
   setActiveMatchId(newMatchId);
   activeMatchId.value = newMatchId;
   scoreboardStore.setState(freshState);
+  activeTournamentId.value = null;
+  setActiveTournamentId(null);
+  tournamentContext.value = null;
 
   penalizedLocal.value = false;
   penalizedVisit.value = false;
-  isPaused.value = false;
+  isPaused.value = true;
   syncUiFromLocalStorage();
 
   await router.replace({ path: "/controls", query: { matchId: newMatchId } });
-
   notifyScoreboardSync();
   notifyMatchChanged(newMatchId);
 
   if (remoteSyncEnabled) {
-    await publishMatchState(newMatchId, scoreboardStore.state);
+    await publishMatchState(newMatchId, scoreboardStore.state, publishOptions());
+  }
+};
+
+const onAdvanceMatch = () => {
+  if (isTournamentMode.value) {
+    void startNextTournamentMatch();
+  } else {
+    void startNewMatch();
   }
 };
 
 const updateLocalTeam = () => {
-  localStorage.setItem("local-team", local.value);
-  window.dispatchEvent(new Event("storage")); // Forzar actualización en otras vistas
+  scoreboardStore.updatePartial({ localTeam: local.value });
+  notifyScoreboardSync();
   scheduleRemotePublish();
 };
+
 const updateVisitlTeam = () => {
-  localStorage.setItem("visit-team", visit.value);
-  window.dispatchEvent(new Event("storage")); // Forzar actualización en otras vistas
+  scoreboardStore.updatePartial({ visitTeam: visit.value });
+  notifyScoreboardSync();
   scheduleRemotePublish();
 };
 
@@ -585,7 +802,11 @@ const syncWithStorage = (event: StorageEvent) => {
   if (event.key === "penalty-game") {
     formattedPenalty.value = localStorage.getItem("penalty-game") || "00:00";
   }
-  if (event.key === "penalized-local" || event.key === "penalized-visit" || event.key === "penalized-team") {
+  if (
+    event.key === "penalized-local" ||
+    event.key === "penalized-visit" ||
+    event.key === "penalized-team"
+  ) {
     syncPenalizedFromStorage();
   }
   if (event.key === "game-period") {
@@ -599,7 +820,6 @@ const syncWithStorage = (event: StorageEvent) => {
     storedVisit.value = localStorage.getItem("visit-team") || "";
     visit.value = storedVisit.value;
   }
-
   if (event.key === "isPaused") {
     isPaused.value = localStorage.getItem("isPaused") === "true";
   }
@@ -609,7 +829,6 @@ const onGameTimeEnded = () => {
   showTimeEndedAlert.value = true;
 };
 
-// 🎯 Detectar cambios en `localStorage`
 onMounted(() => {
   document.title = "Controles";
 
@@ -625,6 +844,8 @@ onMounted(() => {
   syncUiFromLocalStorage();
   claimControlsWriter();
   window.addEventListener("beforeunload", releaseControlsWriter);
+
+  void loadTournamentContext();
 
   if (remoteSyncEnabled && activeMatchId.value) {
     fetchMatchState(activeMatchId.value).then((remoteState) => {
@@ -644,8 +865,6 @@ onMounted(() => {
     });
   }
 
-  // En la misma pestaña, el evento "storage" no se dispara.
-  // Controls actua como fuente visual de tiempo para validar live.
   controlsTicker = window.setInterval(() => {
     tickTimersFromControls();
   }, 1000);
@@ -667,55 +886,175 @@ onUnmounted(() => {
   }
   window.removeEventListener("storage", syncWithStorage);
 });
+
 watch(local, updateLocalTeam);
 watch(visit, updateVisitlTeam);
 </script>
 
 <style scoped>
+.controls-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.controls-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.controls-page.has-tournament .controls-panel {
+  flex: 0 0 50%;
+}
+
+.upcoming-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-top: 4px solid #000;
+  padding: 8px 12px;
+  background: #fafafa;
+}
+
+.upcoming-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.upcoming-count {
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.controls-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.match-panel-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.live-link {
+  color: #1677ff;
+}
+
+.controls-row {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 4px;
+}
+
 .team-goals-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 10px;
-  text-align: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.team-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.team-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.team-name-input {
+  width: 100%;
+  max-width: 180px;
+}
+
+.score-label {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .goal-buttons {
   display: flex;
-  flex-direction: row;
+  gap: 6px;
+  flex-wrap: wrap;
   justify-content: center;
-  align-items: center;
-  gap: 8px;
-}
-
-.penalty-toggle {
-  margin-top: 12px;
-  display: flex;
-  justify-content: center;
-  width: 100%;
 }
 
 .penalty-button {
-  min-width: 120px;
-  height: 36px;
-  font-size: 14px;
+  min-width: 88px;
 }
 
-.match-panel {
+.row-divider {
+  height: 120px !important;
+  margin: 0 4px;
+}
+
+.clock-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.clock-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.pause-button {
+  min-width: 88px;
+  height: 40px !important;
+  font-size: 14px !important;
+  align-self: center;
+}
+
+.game-time-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-minutes-input {
+  width: 56px;
+  text-align: center;
+}
+
+.time-minutes-label {
+  font-size: 12px;
+}
+
+.adjust-buttons {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 20px 10px;
-  padding: 12px;
-  background: #f5f5f5;
-  border-radius: 8px;
-}
-
-.match-panel-info {
-  flex: 1;
-  min-width: 200px;
+  gap: 4px;
+  justify-content: center;
 }
 
 .game-clock-display.time-ended {

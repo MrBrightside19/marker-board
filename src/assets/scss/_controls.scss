@@ -1,22 +1,24 @@
 .control-button {
-  font-size: 50px !important ;
-  height: 150px !important;
-  min-width: 280px !important;
-  margin: 0 30px;
+  font-size: 14px !important;
+  height: 36px !important;
+  min-width: 96px !important;
+  margin: 0 4px;
 }
+
 .control-button-2 {
-  font-size: 40px !important ;
-  height: 120px !important;
-  min-width: 280px !important;
-  margin: 0 30px;
+  font-size: 13px !important;
+  height: 32px !important;
+  min-width: 120px !important;
+  margin: 0 4px;
   background-color: green;
   color: white;
 }
 
-.separator{
-    border: 10px solid black;
+.separator {
+  border: 4px solid black;
 }
-.time-select{
-    font-size: 50px !important;
-    height: 60px;
+
+.time-select {
+  font-size: 14px !important;
+  height: 32px;
 }

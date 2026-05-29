@@ -63,6 +63,20 @@ export function createFreshMatchState(options: {
     localTeam: options.localTeam.trim() || DEFAULT_SCOREBOARD_STATE.localTeam,
     visitTeam: options.visitTeam.trim() || DEFAULT_SCOREBOARD_STATE.visitTeam,
     timeGame: options.timeGame,
+    isPaused: true,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/** Estado al cerrar un partido (siguiente partido / fin de encuentro). */
+export function buildFinishedMatchState(state: ScoreboardState): ScoreboardState {
+  return normalizeScoreboardState({
+    ...state,
+    timeGame: "00:00",
+    penaltyGame: "00:00",
+    isPaused: true,
+    penalizedLocal: false,
+    penalizedVisit: false,
     updatedAt: new Date().toISOString(),
   });
 }

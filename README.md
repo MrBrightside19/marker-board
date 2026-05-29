@@ -90,10 +90,48 @@ No necesitas habilitar Replication/Realtime en Supabase para el live publico.
 
 ## Rutas
 
-- Marcador (TV): `/` — crea o reutiliza un `matchId` y lo guarda en el navegador
-- Controles: `/controls` — usa el mismo `matchId` (misma sesion de partido)
-- Live publico: `/live/:matchId` — URL para compartir (visible en marcador y controles)
+| Ruta | Descripcion |
+|------|-------------|
+| `/` | **Inicio** — partidos en vivo, login/registro |
+| `/tournaments` | Gestion de torneos (organizadores) |
+| `/tournaments/:id` | Detalle, plantilla CSV y calendario |
+| `/board` | Marcador TV (pantalla de cancha) |
+| `/controls` | Mesa de control del partido |
+| `/live/:matchId` | Marcador publico para espectadores |
 
-Al abrir marcador o controles sin `matchId` en la URL, se genera uno automaticamente (ej. `partido-m5abc123`). Ese id enlaza las tres vistas.
+Al abrir marcador o controles sin `matchId` en la URL, se genera uno automaticamente (ej. `partido-m5abc123`).
 
-En **Controles**, el boton **Nuevo partido** reinicia goles, periodo, tiempos y penalidades (conserva nombres de equipos), crea un nuevo `matchId` y publica el estado en Supabase para una URL de live nueva.
+## Usuarios y roles
+
+En **Inicio** puedes registrarte como:
+
+- **Espectador** — sigue partidos y ve marcadores en vivo (no opera la mesa).
+- **Organizador** — inicia partidos desde Inicio, opera **Controles** y enlaza el marcador TV.
+
+La lista **En vivo ahora** muestra partidos activos (actualizados en las ultimas 3 horas). No hace falta iniciar sesion para ver marcadores; la cuenta sirve para organizar y, mas adelante, seguir torneos.
+
+### Esquema Supabase (auth + perfiles + torneos)
+
+1. Ejecuta `supabase/schema.sql` en el SQL Editor.
+2. Ejecuta `supabase/tournaments.sql` (tablas `tournaments` y `tournament_matches`).
+3. Ejecuta `supabase/tournament-results.sql` (marcadores finales, estado del torneo).
+4. Activa **Email** en Authentication → Providers.
+
+Para vaciar partidos y torneos **sin borrar cuentas**, ejecuta `supabase/reset-app-data.sql`.
+
+### Torneos (organizadores)
+
+- Ruta **/tournaments** — crear torneo (nombre, fecha inicio/fin).
+- Plantilla fija en la web: `/marker-board/plantilla-partidos-torneo.csv` (cada fila define su `tiempo_juego`).
+- En el detalle del torneo: **descargar plantilla** y **subir partidos** en lote.
+- Columnas: `local`, `visita`, `tiempo_juego` (obligatorio), `fecha_programada` (opcional, `yyyy-MM-dd HH:mm`).
+- Cada fila importada queda como partido **programado**; usa **Mesa de control** para operarlo (reloj en pausa al iniciar).
+- Al pasar al **siguiente partido**, se guarda el marcador final (goles y fecha) en el historial.
+- En **Inicio**: torneos en curso con últimos resultados, tabla global de resultados recientes y torneos finalizados con tabla de posiciones (3 pts victoria, 1 empate).
+- En el detalle del torneo: **Finalizar torneo** publica la tabla definitiva (partidos, ganadores, puntos).
+
+Columnas en `tournament_matches`: `goal_local`, `goal_visit`, `finished_at`. En `tournaments`: `status` (`active` | `finished`).
+
+## Otras funciones
+
+En **Controles**, **Nuevo partido** reinicia el encuentro y genera un nuevo `matchId` y URL de live.

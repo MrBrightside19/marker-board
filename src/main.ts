@@ -6,14 +6,19 @@ import './style.css'
 import './assets/scss/main.scss'
 import router from './routes/router'
 import { createPinia } from 'pinia'
+import { useAuthStore } from './stores/auth'
 
 const app = createApp(App)
+const pinia = createPinia()
 
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
 
 // Handle GitHub Pages 404 redirect after app is mounted
-router.isReady().then(() => {
+router.isReady().then(async () => {
+  const auth = useAuthStore();
+  await auth.init();
+
   const redirectPath = sessionStorage.getItem('404-redirect');
   if (redirectPath) {
     sessionStorage.removeItem('404-redirect');
