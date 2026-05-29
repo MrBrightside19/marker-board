@@ -7,6 +7,9 @@
     id uuid primary key default gen_random_uuid(),
     organizer_id uuid not null references public.profiles (id) on delete cascade,
     name text not null,
+    sport text not null default 'hockey',
+    visibility text not null default 'private'
+      check (visibility in ('public', 'private')),
     start_date date not null,
     end_date date not null,
   status text not null default 'active' check (status in ('active', 'finished')),
@@ -14,6 +17,9 @@
   created_at timestamptz not null default now(),
     constraint tournaments_dates_check check (end_date >= start_date)
   );
+
+  create index if not exists tournaments_sport_visibility_idx
+    on public.tournaments (sport, visibility, status);
 
   create table if not exists public.tournament_matches (
     id uuid primary key default gen_random_uuid(),

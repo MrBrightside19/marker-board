@@ -15,7 +15,7 @@ const route = useRoute();
 
 const showMainNav = computed(() => {
   const name = route.name?.toString() ?? "";
-  return !["board", "controls", "live"].includes(name);
+  return !["board", "controls", "live", "basketball-board", "basketball-controls", "basketball-live"].includes(name);
 });
 </script>
 

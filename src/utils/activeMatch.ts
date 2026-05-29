@@ -57,6 +57,11 @@ export function getPublicLiveUrl(matchId: string): string {
   return buildAppUrl(`/live/${matchId}`);
 }
 
+/** Live publico de básquet. */
+export function getBasketballPublicLiveUrl(matchId: string): string {
+  return buildAppUrl(`/basquet/live/${matchId}`);
+}
+
 /** Live publico fijo por cancha del torneo. */
 export function getTournamentLiveUrl(tournamentId: string, court = "1"): string {
   const courtSlug = court.trim() || "1";

@@ -1,6 +1,6 @@
 <template>
   <nav class="app-nav" aria-label="Navegación principal">
-    <router-link to="/" class="nav-brand">Marcador Hockey</router-link>
+    <router-link to="/" class="nav-brand">Marcador Deportivo</router-link>
 
     <div class="nav-links">
       <router-link
@@ -21,7 +21,7 @@ import { computed, onMounted } from "vue";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useAuthStore } from "../../stores/auth";
 import { getStoredActiveMatchId } from "../../utils/activeMatch";
-import { boardRoute, controlsRoute } from "../../utils/routes";
+import { boardRoute, controlsRoute, basketballBoardRoute, basketballControlsRoute } from "../../utils/routes";
 
 type NavItem = {
   key: string;
@@ -38,16 +38,28 @@ onMounted(() => {
 });
 
 const visibleItems = computed((): NavItem[] => {
-  const matchId = getStoredActiveMatchId();
   const items: NavItem[] = [
     { key: "home", label: "Inicio", to: { path: "/" } },
     { key: "tournaments", label: "Torneos", to: { path: "/tournaments" }, organizerOnly: true },
   ];
 
   if (auth.isOrganizer) {
+    const matchId = getStoredActiveMatchId();
     items.push(
       { key: "board", label: "Marcador TV", to: boardRoute(matchId ?? undefined), organizerOnly: true },
-      { key: "controls", label: "Controles", to: controlsRoute(matchId ?? undefined), organizerOnly: true }
+      { key: "controls", label: "Controles", to: controlsRoute(matchId ?? undefined), organizerOnly: true },
+      {
+        key: "basketball-board",
+        label: "Marcador Básquet",
+        to: basketballBoardRoute(matchId ?? undefined),
+        organizerOnly: true,
+      },
+      {
+        key: "basketball-controls",
+        label: "Controles Básquet",
+        to: basketballControlsRoute(matchId ?? undefined),
+        organizerOnly: true,
+      }
     );
   }
 

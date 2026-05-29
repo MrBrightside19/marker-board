@@ -1,10 +1,15 @@
+import type { SportId } from "./sport";
+
 export type TournamentMatchStatus = "scheduled" | "live" | "finished";
 export type TournamentStatus = "active" | "finished";
+export type TournamentVisibility = "public" | "private";
 
 export interface Tournament {
   id: string;
   organizerId: string;
   name: string;
+  sport: SportId;
+  visibility: TournamentVisibility;
   startDate: string;
   endDate: string;
   status: TournamentStatus;

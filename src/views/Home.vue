@@ -2,8 +2,8 @@
   <div class="home">
     <header class="home-header">
       <div class="brand">
-        <h1>Marcador Hockey</h1>
-        <p>Partidos en vivo, torneos y resultados</p>
+        <h1>Marcador Deportivo</h1>
+        <p>Partidos en vivo, torneos y ligas públicas</p>
       </div>
 
       <div class="header-actions">
@@ -40,6 +40,34 @@
       </span>
     </section>
 
+    <section class="sport-section">
+      <div class="section-title">
+        <h2>Elige un deporte</h2>
+      </div>
+      <div class="sport-grid">
+        <button
+          v-for="sport in SPORTS"
+          :key="sport.id"
+          type="button"
+          class="sport-card"
+          :class="{
+            active: selectedSportId === sport.id,
+            disabled: !sport.available,
+          }"
+          :disabled="!sport.available"
+          @click="selectSport(sport.id)"
+        >
+          <span class="sport-name">{{ sport.name }}</span>
+          <span class="sport-desc">{{ sport.description }}</span>
+          <a-tag v-if="!sport.available" class="sport-tag">Próximamente</a-tag>
+        </button>
+      </div>
+      <p class="sport-hint">
+        Solo los torneos <strong>públicos</strong> aparecen aquí. Los torneos privados se comparten
+        con un enlace directo.
+      </p>
+    </section>
+
     <section class="live-section">
       <div class="section-title">
         <h2>En vivo ahora</h2>
@@ -48,7 +76,7 @@
 
       <a-empty
         v-if="!loadingHome && liveMatches.length === 0"
-        description="No hay partidos en vivo en este momento"
+        :description="`No hay partidos en vivo de ${selectedSportName} en este momento`"
       />
 
       <a-row v-else :gutter="[16, 16]">
@@ -69,17 +97,17 @@
 
             <div class="match-scoreline">
               <div class="team-line">
-                <span class="team-name">{{ match.state.localTeam }}</span>
-                <span class="team-goals">{{ match.state.goalLocal }}</span>
+                <span class="team-name">{{ matchLocalTeam(match) }}</span>
+                <span class="team-goals">{{ matchLocalScore(match) }}</span>
               </div>
               <div class="team-line">
-                <span class="team-name">{{ match.state.visitTeam }}</span>
-                <span class="team-goals">{{ match.state.goalVisit }}</span>
+                <span class="team-name">{{ matchVisitTeam(match) }}</span>
+                <span class="team-goals">{{ matchVisitScore(match) }}</span>
               </div>
             </div>
 
             <div class="match-meta">
-              <span>Periodo {{ match.state.gamePeriod }}</span>
+              <span>Periodo {{ matchPeriod(match) }}</span>
               <span class="clock">{{ displayClock(match) }}</span>
             </div>
 
@@ -88,7 +116,7 @@
             </p>
 
             <div class="card-actions">
-              <router-link :to="liveRoute(match.id)">
+              <router-link :to="liveRouteForMatch(match)">
                 <a-button type="primary" block>Ver marcador</a-button>
               </router-link>
             </div>
@@ -112,6 +140,10 @@
             {{ t.finishedCount }} finalizados · {{ t.liveCount }} en juego ·
             {{ t.scheduledCount }} programados
           </p>
+
+          <router-link :to="tournamentPublicRoute(t.id)" class="tournament-link">
+            Ver torneo completo →
+          </router-link>
 
           <a-table
             v-if="t.recentResults.length > 0"
@@ -145,7 +177,7 @@
     >
       <div class="section-title">
         <h2>Últimos resultados</h2>
-        <span class="section-sub">Torneos activos</span>
+        <span class="section-sub">Torneos públicos de {{ selectedSportName }}</span>
       </div>
 
       <a-table
@@ -182,8 +214,17 @@
         <a-collapse-panel
           v-for="item in finishedTournaments"
           :key="item.tournament.id"
-          :header="`${item.tournament.name} (${item.tournament.matches.length} partidos)`"
         >
+          <template #header>
+            <span>{{ item.tournament.name }} ({{ item.tournament.matches.length }} partidos)</span>
+            <router-link
+              :to="tournamentPublicRoute(item.tournament.id)"
+              class="tournament-link-inline"
+              @click.stop
+            >
+              Ver torneo →
+            </router-link>
+          </template>
           <TournamentStandingsPanel
             :matches="item.tournament.matches"
             title="Resultados y tabla de posiciones"
@@ -220,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import dayjs from "dayjs";
@@ -242,15 +283,32 @@ import type {
   TournamentMatchResult,
   TournamentWithMatches,
 } from "../types/tournament";
+import {
+  DEFAULT_SPORT_ID,
+  SPORTS,
+  getSportById,
+  isSportId,
+  type SportId,
+} from "../types/sport";
 import { getRunningClocks } from "../utils/scoreboardClock";
 import { createMatchId, setActiveMatchId } from "../utils/activeMatch";
 import { registerMatchRecord } from "../services/liveMatchesService";
-import { boardRoute, liveRoute as liveRouteUtil } from "../utils/routes";
+import { createFreshBasketballState, useBasketballScoreboardStore } from "../stores/basketballScoreboard";
+import { isBasketballScoreboardState } from "../types/basketballScoreboard";
+import { getBasketballRunningClock } from "../utils/basketballClock";
+import {
+  basketballBoardRoute,
+  basketballLiveRoute,
+  boardRoute,
+  liveRoute as liveRouteUtil,
+  tournamentPublicRoute as tournamentPublicRouteUtil,
+} from "../utils/routes";
 
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
 const scoreboardStore = useScoreboardStore();
+const basketballStore = useBasketballScoreboardStore();
 
 const remoteEnabled = isSupabaseConfigured();
 const liveMatches = ref<LiveMatchSummary[]>([]);
@@ -263,6 +321,11 @@ const authModalVisible = ref(false);
 const authModalMode = ref<"login" | "register">("login");
 const activeTournamentKeys = ref<string[]>([]);
 const finishedTournamentKeys = ref<string[]>([]);
+const selectedSportId = ref<SportId>(DEFAULT_SPORT_ID);
+
+const selectedSportName = computed(
+  () => getSportById(selectedSportId.value)?.name ?? "Hockey"
+);
 
 let refreshInterval: number | null = null;
 let matchesPollInterval: number | null = null;
@@ -281,11 +344,54 @@ const historyColumns = [
   { title: "Fecha", key: "finishedAt", width: 120 },
 ];
 
-function liveRoute(matchId: string) {
-  return liveRouteUtil(matchId);
+function liveRouteForMatch(match: LiveMatchSummary) {
+  if (isBasketballScoreboardState(match.state)) {
+    return basketballLiveRoute(match.id);
+  }
+  return liveRouteUtil(match.id);
+}
+
+function matchLocalTeam(match: LiveMatchSummary): string {
+  return match.state.localTeam;
+}
+
+function matchVisitTeam(match: LiveMatchSummary): string {
+  return match.state.visitTeam;
+}
+
+function matchLocalScore(match: LiveMatchSummary): number {
+  if (isBasketballScoreboardState(match.state)) return match.state.pointsLocal;
+  return match.state.goalLocal;
+}
+
+function matchVisitScore(match: LiveMatchSummary): number {
+  if (isBasketballScoreboardState(match.state)) return match.state.pointsVisit;
+  return match.state.goalVisit;
+}
+
+function matchPeriod(match: LiveMatchSummary): number {
+  return match.state.gamePeriod;
+}
+
+function tournamentPublicRoute(tournamentId: string) {
+  return tournamentPublicRouteUtil(tournamentId);
+}
+
+function selectSport(sportId: SportId) {
+  const sport = getSportById(sportId);
+  if (!sport?.available) return;
+  selectedSportId.value = sportId;
+  router.replace({ query: { ...route.query, deporte: sportId } });
+  loadHomeData();
 }
 
 function displayClock(match: LiveMatchSummary): string {
+  if (isBasketballScoreboardState(match.state)) {
+    if (match.state.isPaused || match.state.timeGame === "00:00") {
+      return match.state.timeGame;
+    }
+    return getBasketballRunningClock(match.state, nowMs.value);
+  }
   if (match.state.isPaused || match.state.timeGame === "00:00") {
     return match.state.timeGame;
   }
@@ -315,11 +421,12 @@ async function loadHomeData() {
   if (!remoteEnabled) return;
   loadingHome.value = true;
   try {
+    const filters = { sportId: selectedSportId.value };
     const [live, active, recent, finishedList] = await Promise.all([
-      fetchLiveMatches(),
-      fetchActiveTournamentsWithResults(),
-      fetchRecentTournamentResults(30),
-      fetchFinishedTournaments(),
+      fetchLiveMatches({ sportId: selectedSportId.value, publicTournamentsOnly: true }),
+      fetchActiveTournamentsWithResults(filters),
+      fetchRecentTournamentResults(30, filters),
+      fetchFinishedTournaments(filters),
     ]);
 
     liveMatches.value = live;
@@ -346,6 +453,28 @@ async function startNewOrganizerMatch() {
   startingMatch.value = true;
   try {
     const matchId = createMatchId();
+
+    if (selectedSportId.value === "basquet") {
+      const state = createFreshBasketballState({
+        localTeam: "Equipo Local",
+        visitTeam: "Equipo Visita",
+        timeGame: "10:00",
+      });
+
+      setActiveMatchId(matchId);
+      basketballStore.setState(state);
+
+      await registerMatchRecord({
+        matchId,
+        state,
+        organizerId: auth.userId,
+        title: `${state.localTeam} vs ${state.visitTeam}`,
+      });
+
+      await router.push(basketballBoardRoute(matchId));
+      return;
+    }
+
     const state = createFreshMatchState({
       localTeam: "Equipo Local",
       visitTeam: "Equipo Visita",
@@ -369,7 +498,12 @@ async function startNewOrganizerMatch() {
 }
 
 onMounted(async () => {
-  document.title = "Marcador Hockey";
+  document.title = "Marcador Deportivo";
+  const querySport = route.query.deporte?.toString();
+  if (querySport && isSportId(querySport) && getSportById(querySport)?.available) {
+    selectedSportId.value = querySport;
+  }
+
   await auth.init();
   await loadHomeData();
 
@@ -386,6 +520,17 @@ onMounted(async () => {
 
   matchesPollInterval = window.setInterval(loadHomeData, 15000);
 });
+
+watch(
+  () => route.query.deporte,
+  (value) => {
+    const sport = value?.toString();
+    if (sport && isSportId(sport) && getSportById(sport)?.available && sport !== selectedSportId.value) {
+      selectedSportId.value = sport;
+      loadHomeData();
+    }
+  }
+);
 
 onUnmounted(() => {
   if (refreshInterval) {
@@ -463,6 +608,88 @@ onUnmounted(() => {
 .organizer-actions .hint {
   color: rgba(255, 255, 255, 0.55);
   font-size: 14px;
+}
+
+.sport-section {
+  margin-bottom: 32px;
+}
+
+.sport-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.sport-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #303030;
+  background: #141414;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sport-card:hover:not(.disabled) {
+  border-color: #1677ff;
+}
+
+.sport-card.active {
+  border-color: #1677ff;
+  background: #111d2c;
+}
+
+.sport-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sport-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sport-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.sport-tag {
+  margin-top: 4px;
+}
+
+.sport-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.tournament-link {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: #69b1ff;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.tournament-link:hover {
+  text-decoration: underline;
+}
+
+.tournament-link-inline {
+  margin-left: 12px;
+  color: #69b1ff;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.tournament-link-inline:hover {
+  text-decoration: underline;
 }
 
 .live-section,

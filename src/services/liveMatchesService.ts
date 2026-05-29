@@ -1,33 +1,52 @@
+import { normalizeBasketballState } from "../stores/basketballScoreboard";
 import { normalizeScoreboardState } from "../stores/scoreboard";
 import type { ScoreboardState } from "../types/scoreboard";
+import { isBasketballScoreboardState } from "../types/basketballScoreboard";
+import type { BasketballScoreboardState } from "../types/basketballScoreboard";
 import type { LiveMatchSummary } from "../types/liveMatch";
+import { DEFAULT_SPORT_ID, type SportId } from "../types/sport";
 import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
 
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 
+export type LiveMatchesFilters = {
+  sportId: SportId;
+  publicTournamentsOnly?: boolean;
+};
+
 type MatchListRow = {
   id: string;
   title: string | null;
-  state: ScoreboardState;
+  state: ScoreboardState | BasketballScoreboardState;
   updated_at: string;
   organizer_id: string | null;
   is_live: boolean | null;
+  tournament_id?: string | null;
   profiles?: { display_name: string | null } | { display_name: string | null }[] | null;
 };
 
-function buildTitle(state: ScoreboardState, fallback?: string | null): string {
+type TournamentMetaRow = {
+  id: string;
+  sport: string;
+  visibility: string;
+};
+
+function buildTitleFromState(state: ScoreboardState | BasketballScoreboardState, fallback?: string | null): string {
   if (fallback?.trim()) return fallback.trim();
+  if (isBasketballScoreboardState(state)) {
+    return `${state.localTeam} vs ${state.visitTeam}`;
+  }
   return `${state.localTeam} vs ${state.visitTeam}`;
 }
 
 function mapRow(row: MatchListRow): LiveMatchSummary {
-  const state = normalizeScoreboardState(row.state);
   const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  const state = row.state;
 
   return {
     id: row.id,
-    title: buildTitle(state, row.title),
-    state,
+    title: buildTitleFromState(state as ScoreboardState | BasketballScoreboardState, row.title),
+    state: state as ScoreboardState,
     updatedAt: row.updated_at,
     organizerId: row.organizer_id,
     organizerName: profile?.display_name?.trim() || null,
@@ -56,7 +75,53 @@ async function fetchFinishedTournamentMatchIds(): Promise<Set<string>> {
   );
 }
 
-export async function fetchLiveMatches(): Promise<LiveMatchSummary[]> {
+async function fetchTournamentMetaByIds(ids: string[]): Promise<Map<string, TournamentMetaRow>> {
+  const supabase = getSupabase();
+  const map = new Map<string, TournamentMetaRow>();
+  if (!supabase || ids.length === 0) return map;
+
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select("id, sport, visibility")
+    .in("id", ids);
+
+  if (error) {
+    console.error("[liveMatches] tournament meta", error.message);
+    return map;
+  }
+
+  for (const row of (data as TournamentMetaRow[]) ?? []) {
+    map.set(row.id, row);
+  }
+  return map;
+}
+
+function matchVisibleOnHome(
+  row: MatchListRow,
+  tournamentMeta: Map<string, TournamentMetaRow>,
+  filters?: LiveMatchesFilters
+): boolean {
+  if (!filters) return true;
+
+  const tournamentId = row.tournament_id;
+  if (!tournamentId) {
+    if (isBasketballScoreboardState(row.state)) {
+      return filters.sportId === "basquet";
+    }
+    return filters.sportId === DEFAULT_SPORT_ID;
+  }
+
+  const meta = tournamentMeta.get(tournamentId);
+  if (!meta) return false;
+
+  if (filters.publicTournamentsOnly && meta.visibility !== "public") {
+    return false;
+  }
+
+  return meta.sport === filters.sportId;
+}
+
+export async function fetchLiveMatches(filters?: LiveMatchesFilters): Promise<LiveMatchSummary[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
@@ -66,7 +131,7 @@ export async function fetchLiveMatches(): Promise<LiveMatchSummary[]> {
   const { data, error } = await supabase
     .from("matches")
     .select(
-      "id, title, state, updated_at, organizer_id, is_live, profiles:organizer_id ( display_name )"
+      "id, title, state, updated_at, organizer_id, is_live, tournament_id, profiles:organizer_id ( display_name )"
     )
     .eq("is_live", true)
     .gte("updated_at", cutoff)
@@ -75,25 +140,32 @@ export async function fetchLiveMatches(): Promise<LiveMatchSummary[]> {
 
   if (error) {
     console.error("[liveMatches] fetch", error.message);
-    return fetchLiveMatchesFallback(cutoff, finishedIds);
+    return fetchLiveMatchesFallback(cutoff, finishedIds, filters);
   }
 
-  return (data as MatchListRow[])
-    .filter((row) => !finishedIds.has(row.id))
+  const rows = (data as MatchListRow[]).filter((row) => !finishedIds.has(row.id));
+  const tournamentIds = [
+    ...new Set(rows.map((row) => row.tournament_id).filter((id): id is string => Boolean(id))),
+  ];
+  const tournamentMeta = await fetchTournamentMetaByIds(tournamentIds);
+
+  return rows
+    .filter((row) => matchVisibleOnHome(row, tournamentMeta, filters))
     .map(mapRow);
 }
 
 /** Sin join a profiles si el esquema aun no tiene FK */
 async function fetchLiveMatchesFallback(
   cutoff: string,
-  finishedIds: Set<string> = new Set()
+  finishedIds: Set<string> = new Set(),
+  filters?: LiveMatchesFilters
 ): Promise<LiveMatchSummary[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
   const { data, error } = await supabase
     .from("matches")
-    .select("id, title, state, updated_at, organizer_id, is_live")
+    .select("id, title, state, updated_at, organizer_id, is_live, tournament_id")
     .gte("updated_at", cutoff)
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -103,14 +175,22 @@ async function fetchLiveMatchesFallback(
     return [];
   }
 
-  return (data as MatchListRow[])
-    .filter((row) => row.is_live === true && !finishedIds.has(row.id))
+  const rows = (data as MatchListRow[])
+    .filter((row) => row.is_live === true && !finishedIds.has(row.id));
+
+  const tournamentIds = [
+    ...new Set(rows.map((row) => row.tournament_id).filter((id): id is string => Boolean(id))),
+  ];
+  const tournamentMeta = await fetchTournamentMetaByIds(tournamentIds);
+
+  return rows
+    .filter((row) => matchVisibleOnHome(row, tournamentMeta, filters))
     .map(mapRow);
 }
 
 export async function registerMatchRecord(options: {
   matchId: string;
-  state: ScoreboardState;
+  state: ScoreboardState | BasketballScoreboardState;
   organizerId?: string | null;
   title?: string;
   tournamentId?: string | null;
@@ -119,13 +199,18 @@ export async function registerMatchRecord(options: {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const state = normalizeScoreboardState(options.state);
-  const title = options.title?.trim() || buildTitle(state);
+  const isBasketball = isBasketballScoreboardState(options.state);
+  const normalized: ScoreboardState | BasketballScoreboardState = isBasketball
+    ? normalizeBasketballState(options.state)
+    : normalizeScoreboardState(options.state as ScoreboardState);
+  const title =
+    options.title?.trim() ||
+    buildTitleFromState(normalized as ScoreboardState | BasketballScoreboardState);
 
-  const publishedAt = state.updatedAt || new Date().toISOString();
+  const publishedAt = normalized.updatedAt || new Date().toISOString();
   const row: Record<string, unknown> = {
     id: options.matchId,
-    state: { ...state, updatedAt: publishedAt },
+    state: { ...normalized, updatedAt: publishedAt },
     title,
     is_live: options.isLive ?? true,
     organizer_id: options.organizerId ?? null,

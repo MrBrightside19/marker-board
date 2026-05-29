@@ -17,6 +17,12 @@
       <a-row v-else :gutter="[16, 16]">
         <a-col v-for="t in tournaments" :key="t.id" :xs="24" :md="12" :lg="8">
           <a-card hoverable class="tournament-card" @click="goToTournament(t.id)">
+            <div class="card-tags">
+              <a-tag :color="t.visibility === 'public' ? 'blue' : 'default'">
+                {{ t.visibility === "public" ? "Público" : "Privado" }}
+              </a-tag>
+              <a-tag>{{ sportLabel(t.sport) }}</a-tag>
+            </div>
             <h3>{{ t.name }}</h3>
             <p>{{ formatDate(t.startDate) }} — {{ formatDate(t.endDate) }}</p>
             <a-button type="link" @click.stop="goToTournament(t.id)">Gestionar partidos →</a-button>
@@ -37,6 +43,27 @@
         <a-form-item label="Nombre del torneo" required>
           <a-input v-model:value="form.name" placeholder="Ej. Liga Verano 2026" />
         </a-form-item>
+        <a-form-item label="Deporte" required>
+          <a-select v-model:value="form.sport" style="width: 100%">
+            <a-select-option
+              v-for="sport in availableSports"
+              :key="sport.id"
+              :value="sport.id"
+            >
+              {{ sport.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="Visibilidad" required>
+          <a-radio-group v-model:value="form.visibility">
+            <a-radio value="private">Privado (solo con enlace)</a-radio>
+            <a-radio value="public">Público (aparece en inicio)</a-radio>
+          </a-radio-group>
+          <p class="form-hint visibility-hint">
+            Los torneos privados no se listan en el inicio. Comparte el enlace del torneo para que
+            otros vean calendario y marcadores.
+          </p>
+        </a-form-item>
         <a-form-item label="Fecha inicio" required>
           <a-date-picker v-model:value="form.startDate" style="width: 100%" />
         </a-form-item>
@@ -53,13 +80,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useAuthStore } from "../stores/auth";
-import type { Tournament } from "../types/tournament";
+import type { Tournament, TournamentVisibility } from "../types/tournament";
+import { DEFAULT_SPORT_ID, SPORTS, getSportById, type SportId } from "../types/sport";
 import { createTournament as createTournamentApi, fetchTournamentsByOrganizer } from "../services/tournamentService";
 import { getTournamentTemplateUrl } from "../utils/tournamentCsv";
 
@@ -72,15 +100,25 @@ const loading = ref(true);
 const showCreate = ref(false);
 const creating = ref(false);
 
+const availableSports = computed(() => SPORTS.filter((sport) => sport.available));
+
 const form = ref<{
   name: string;
+  sport: SportId;
+  visibility: TournamentVisibility;
   startDate: Dayjs | null;
   endDate: Dayjs | null;
 }>({
   name: "",
+  sport: DEFAULT_SPORT_ID,
+  visibility: "private",
   startDate: dayjs(),
   endDate: dayjs().add(7, "day"),
 });
+
+function sportLabel(sportId: SportId) {
+  return getSportById(sportId)?.name ?? sportId;
+}
 
 function formatDate(value: string) {
   return dayjs(value).format("DD/MM/YYYY");
@@ -123,6 +161,8 @@ async function createTournament() {
     const created = await createTournamentApi({
       organizerId: auth.userId,
       name: form.value.name.trim(),
+      sport: form.value.sport,
+      visibility: form.value.visibility,
       startDate: form.value.startDate.format("YYYY-MM-DD"),
       endDate: form.value.endDate.format("YYYY-MM-DD"),
     });
@@ -194,10 +234,22 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.7);
 }
 
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .form-hint {
   margin: 0;
   font-size: 13px;
   color: rgba(0, 0, 0, 0.55);
   line-height: 1.5;
+}
+
+.visibility-hint {
+  margin-top: 8px;
+  color: rgba(0, 0, 0, 0.45);
 }
 </style>

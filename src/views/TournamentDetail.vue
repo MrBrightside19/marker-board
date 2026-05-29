@@ -6,6 +6,10 @@
           {{ tournament.name }}
           <a-tag v-if="tournament.status === 'finished'" color="default">Finalizado</a-tag>
           <a-tag v-else color="green">Activo</a-tag>
+          <a-tag :color="tournament.visibility === 'public' ? 'blue' : 'default'">
+            {{ tournament.visibility === "public" ? "Público" : "Privado" }}
+          </a-tag>
+          <a-tag>{{ sportLabel }}</a-tag>
         </h1>
         <p>{{ formatDate(tournament.startDate) }} — {{ formatDate(tournament.endDate) }}</p>
         <p class="live-hint">
@@ -23,6 +27,24 @@
         Finalizar torneo
       </a-button>
     </header>
+
+    <section class="share-panel">
+      <h2>Enlace para espectadores</h2>
+      <p>
+        {{
+          tournament.visibility === "public"
+            ? "Este torneo también aparece en el inicio. Comparte este enlace para acceso directo."
+            : "Torneo privado: no aparece en el inicio. Comparte este enlace para que otros vean calendario y marcadores."
+        }}
+      </p>
+      <div class="share-row">
+        <a-input :value="publicTournamentUrl" readonly />
+        <a-button type="primary" @click="copyPublicLink">Copiar enlace</a-button>
+        <router-link :to="tournamentPublicRoute(tournament.id)">
+          <a-button>Vista espectador</a-button>
+        </router-link>
+      </div>
+    </section>
 
     <section class="import-panel">
       <h2>Carga masiva de partidos</h2>
@@ -143,11 +165,12 @@ import {
   writeScoreboardStateToLocalStorage,
 } from "../stores/scoreboard";
 import { getTournamentTemplateUrl, parseTournamentCsv } from "../utils/tournamentCsv";
-
-const templateUrl = getTournamentTemplateUrl();
-import { openBoardInNewTab } from "../utils/routes";
+import { getSportById } from "../types/sport";
+import { getTournamentPublicUrl, openBoardInNewTab, tournamentPublicRoute as tournamentPublicRouteUtil } from "../utils/routes";
 import { setActiveMatchId, setActiveTournamentId } from "../utils/activeMatch";
 import { formatCourtLabel } from "../utils/court";
+
+const templateUrl = getTournamentTemplateUrl();
 
 const route = useRoute();
 const router = useRouter();
@@ -166,6 +189,28 @@ const finishedMatchCount = computed(
       (m) => m.status === "finished" && m.goalLocal != null
     ).length ?? 0
 );
+
+const sportLabel = computed(
+  () => getSportById(tournament.value?.sport)?.name ?? "Deporte"
+);
+
+const publicTournamentUrl = computed(() =>
+  tournament.value ? getTournamentPublicUrl(tournament.value.id) : ""
+);
+
+function tournamentPublicRoute(id: string) {
+  return tournamentPublicRouteUtil(id);
+}
+
+async function copyPublicLink() {
+  if (!publicTournamentUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(publicTournamentUrl.value);
+    message.success("Enlace copiado");
+  } catch {
+    message.error("No se pudo copiar el enlace");
+  }
+}
 
 const columns = [
   { title: "Local", dataIndex: "localTeam", key: "localTeam" },
@@ -292,7 +337,11 @@ async function handleFinalizeTournament() {
     const updated = await finalizeTournament(tournament.value.id);
     if (updated) {
       tournament.value = updated;
-      message.success("Torneo finalizado. La tabla ya está visible en Inicio.");
+      message.success(
+        tournament.value.visibility === "public"
+          ? "Torneo finalizado. La tabla ya está visible en Inicio."
+          : "Torneo finalizado. Comparte el enlace del torneo para que otros vean la tabla."
+      );
     }
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo finalizar el torneo");
@@ -365,6 +414,19 @@ onMounted(async () => {
   color: #69b1ff;
 }
 
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.share-row :deep(.ant-input) {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.share-panel,
 .import-panel,
 .standings-section,
 .matches-section {
@@ -375,6 +437,7 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 
+.share-panel h2,
 .import-panel h2,
 .standings-section h2,
 .matches-section h2 {
@@ -388,6 +451,7 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.share-panel p,
 .import-panel p {
   color: rgba(255, 255, 255, 0.65);
   margin-bottom: 16px;

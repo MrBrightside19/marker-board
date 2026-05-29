@@ -12,6 +12,7 @@ import type {
 } from "../types/tournament";
 import { createMatchId } from "../utils/activeMatch";
 import { normalizeCourt } from "../utils/court";
+import { resolveSportId, type SportId } from "../types/sport";
 import { getSupabase } from "./supabaseClient";
 import { registerMatchRecord } from "./liveMatchesService";
 
@@ -19,11 +20,17 @@ type TournamentRow = {
   id: string;
   organizer_id: string;
   name: string;
+  sport?: string;
+  visibility?: string;
   start_date: string;
   end_date: string;
   status?: string;
   live_match_id?: string | null;
   created_at: string;
+};
+
+export type PublicHomeFilters = {
+  sportId: SportId;
 };
 
 type TournamentMatchRow = {
@@ -47,6 +54,8 @@ function mapTournament(row: TournamentRow): Tournament {
     id: row.id,
     organizerId: row.organizer_id,
     name: row.name,
+    sport: resolveSportId(row.sport),
+    visibility: row.visibility === "private" ? "private" : "public",
     startDate: row.start_date,
     endDate: row.end_date,
     status: (row.status === "finished" ? "finished" : "active") as Tournament["status"],
@@ -95,6 +104,8 @@ function mapToMatchResult(
 export async function createTournament(input: {
   organizerId: string;
   name: string;
+  sport: SportId;
+  visibility: Tournament["visibility"];
   startDate: string;
   endDate: string;
 }): Promise<Tournament> {
@@ -106,6 +117,8 @@ export async function createTournament(input: {
     .insert({
       organizer_id: input.organizerId,
       name: input.name.trim(),
+      sport: input.sport,
+      visibility: input.visibility,
       start_date: input.startDate,
       end_date: input.endDate,
     })
@@ -391,15 +404,23 @@ export async function finalizeTournament(tournamentId: string): Promise<Tourname
   return fetchTournamentWithMatches(tournamentId);
 }
 
-export async function fetchActiveTournamentsWithResults(): Promise<ActiveTournamentSummary[]> {
+export async function fetchActiveTournamentsWithResults(
+  filters?: PublicHomeFilters
+): Promise<ActiveTournamentSummary[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
-  const { data: tournaments, error } = await supabase
+  let query = supabase
     .from("tournaments")
     .select("*")
     .eq("status", "active")
-    .order("start_date", { ascending: false });
+    .eq("visibility", "public");
+
+  if (filters?.sportId) {
+    query = query.eq("sport", filters.sportId);
+  }
+
+  const { data: tournaments, error } = await query.order("start_date", { ascending: false });
 
   if (error || !tournaments?.length) {
     if (error) console.error("[tournaments] active", error.message);
@@ -451,19 +472,27 @@ export async function fetchActiveTournamentsWithResults(): Promise<ActiveTournam
 }
 
 export async function fetchRecentTournamentResults(
-  limit = 30
+  limit = 30,
+  filters?: PublicHomeFilters
 ): Promise<TournamentMatchResult[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from("tournament_matches")
-    .select("*, tournaments!inner(id, name, status)")
+    .select("*, tournaments!inner(id, name, status, sport, visibility)")
     .eq("status", "finished")
+    .eq("tournaments.visibility", "public")
     .not("finished_at", "is", null)
     .not("goal_local", "is", null)
     .order("finished_at", { ascending: false })
     .limit(limit);
+
+  if (filters?.sportId) {
+    query = query.eq("tournaments.sport", filters.sportId);
+  }
+
+  const { data: rows, error } = await query;
 
   if (error) {
     console.error("[tournaments] recent results", error.message);
@@ -519,15 +548,23 @@ async function fetchRecentResultsFallback(limit: number): Promise<TournamentMatc
   });
 }
 
-export async function fetchFinishedTournaments(): Promise<FinishedTournamentSummary[]> {
+export async function fetchFinishedTournaments(
+  filters?: PublicHomeFilters
+): Promise<FinishedTournamentSummary[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
 
-  const { data: tournaments, error } = await supabase
+  let query = supabase
     .from("tournaments")
     .select("*")
     .eq("status", "finished")
-    .order("end_date", { ascending: false });
+    .eq("visibility", "public");
+
+  if (filters?.sportId) {
+    query = query.eq("sport", filters.sportId);
+  }
+
+  const { data: tournaments, error } = await query.order("end_date", { ascending: false });
 
   if (error || !tournaments?.length) {
     if (error) console.error("[tournaments] finished list", error.message);
