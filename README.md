@@ -7,6 +7,35 @@ corepack yarn install
 corepack yarn dev
 ```
 
+## Deploy (GitHub Pages)
+
+El workflow `.github/workflows/deploy.yml` publica en cada push a `develop` o `master`.
+
+Si el job **deploy** falla con *Branch "develop" is not allowed to deploy to github-pages*, hay que autorizar la rama en el repositorio:
+
+1. **Settings** → **Environments** → **github-pages**
+2. En **Deployment branches** (o *Deployment protection rules*), cambia de solo `master` a:
+   - **All branches**, o
+   - **Selected branches** y añade `develop` (y `master` si lo usas)
+3. Si hay **Required reviewers** o reglas de espera, desactívalas para este entorno o el deploy quedará pendiente de aprobación.
+
+En **Settings** → **Pages**, la fuente debe ser **GitHub Actions** (no la rama `gh-pages`).
+
+### Variables en GitHub Actions (build de producción)
+
+Vite solo lee variables que empiezan por `VITE_` **en el momento del build**. El `.env` local no se sube al repo; hay que definirlas en GitHub:
+
+1. Repo → **Settings** → **Secrets and variables** → **Actions**
+2. Pestaña **Variables** → **New repository variable**:
+   - `VITE_SUPABASE_URL` → `https://TU_PROYECTO.supabase.co`
+   - `VITE_POLL_INTERVAL_MS` → `5000` (opcional)
+3. Pestaña **Secrets** → **New repository secret**:
+   - `VITE_SUPABASE_ANON_KEY` → tu clave anon/public de Supabase
+
+El workflow las inyecta en el paso **Build** (ver `deploy.yml`). Tras guardarlas, haz un push o relanza el workflow.
+
+> La clave anon de Supabase va en el JS del navegador; aun así conviene guardarla como **secret** y no commitear el `.env`.
+
 ## Sincronizacion remota (costo minimo)
 
 La app usa Supabase solo con lectura/escritura REST (sin WebSocket Realtime para espectadores).
