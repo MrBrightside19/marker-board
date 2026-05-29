@@ -16,6 +16,7 @@ const STORAGE_MAP = {
   penalizedLocal: "penalized-local",
   penalizedVisit: "penalized-visit",
   penalizedTeamLegacy: "penalized-team",
+  updatedAt: "scoreboard-updated-at",
 } as const;
 
 function readNumber(key: string, fallback: number): number {
@@ -52,6 +53,20 @@ function readPenalizedFlags(): { penalizedLocal: boolean; penalizedVisit: boolea
   return { penalizedLocal: false, penalizedVisit: false };
 }
 
+export function createFreshMatchState(options: {
+  localTeam: string;
+  visitTeam: string;
+  timeGame: string;
+}): ScoreboardState {
+  return normalizeScoreboardState({
+    ...DEFAULT_SCOREBOARD_STATE,
+    localTeam: options.localTeam.trim() || DEFAULT_SCOREBOARD_STATE.localTeam,
+    visitTeam: options.visitTeam.trim() || DEFAULT_SCOREBOARD_STATE.visitTeam,
+    timeGame: options.timeGame,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export function normalizeScoreboardState(state: ScoreboardState): ScoreboardState {
   const legacyTeam = (state as ScoreboardState & { penalizedTeam?: string }).penalizedTeam;
   let penalizedLocal = Boolean(state.penalizedLocal);
@@ -86,7 +101,7 @@ export function readScoreboardStateFromLocalStorage(): ScoreboardState {
     isPaused: readBool(STORAGE_MAP.isPaused, DEFAULT_SCOREBOARD_STATE.isPaused),
     penalizedLocal: penalized.penalizedLocal,
     penalizedVisit: penalized.penalizedVisit,
-    updatedAt: new Date().toISOString(),
+    updatedAt: readString(STORAGE_MAP.updatedAt, ""),
   };
 }
 
@@ -102,6 +117,9 @@ export function writeScoreboardStateToLocalStorage(state: ScoreboardState): void
   localStorage.setItem(STORAGE_MAP.penalizedLocal, String(state.penalizedLocal));
   localStorage.setItem(STORAGE_MAP.penalizedVisit, String(state.penalizedVisit));
   localStorage.removeItem(STORAGE_MAP.penalizedTeamLegacy);
+  if (state.updatedAt) {
+    localStorage.setItem(STORAGE_MAP.updatedAt, state.updatedAt);
+  }
 }
 
 export const useScoreboardStore = defineStore("scoreboard", {

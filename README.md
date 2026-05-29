@@ -95,3 +95,5 @@ No necesitas habilitar Replication/Realtime en Supabase para el live publico.
 - Live publico: `/live/:matchId` — URL para compartir (visible en marcador y controles)
 
 Al abrir marcador o controles sin `matchId` en la URL, se genera uno automaticamente (ej. `partido-m5abc123`). Ese id enlaza las tres vistas.
+
+En **Controles**, el boton **Nuevo partido** reinicia goles, periodo, tiempos y penalidades (conserva nombres de equipos), crea un nuevo `matchId` y publica el estado en Supabase para una URL de live nueva.

@@ -23,7 +23,7 @@
         </div>
 
         <div class="game-info">
-          <div class="time">{{ formattedTime }}</div>
+          <div class="time" :class="{ 'time-ended': showTimeEndedAlert }">{{ formattedTime }}</div>
           <div class="period-container">
             <div class="label">Periodo</div>
             <div class="period">{{ gamePeriod }}</div>
@@ -63,7 +63,6 @@ import duration from "dayjs/plugin/duration";
 import {
   readScoreboardStateFromLocalStorage,
   useScoreboardStore,
-  writeScoreboardStateToLocalStorage,
 } from "../stores/scoreboard";
 import {
   fetchMatchState,
@@ -71,7 +70,19 @@ import {
   publishMatchState,
 } from "../services/matchSync";
 import { getPollIntervalMs } from "../config/sync";
-import { getPublicLiveUrl, resolveActiveMatchId } from "../utils/activeMatch";
+import {
+  ACTIVE_MATCH_STORAGE_KEY,
+  getPublicLiveUrl,
+  resolveActiveMatchId,
+} from "../utils/activeMatch";
+import {
+  isControlsActiveWriter,
+  isRemoteStateNewer,
+  MATCH_CHANGED_EVENT,
+  SCOREBOARD_SYNC_EVENT,
+} from "../utils/scoreboardSync";
+import { getRunningClocks, parseTimeToMs } from "../utils/scoreboardClock";
+import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
 
 dayjs.extend(duration);
 
@@ -85,6 +96,8 @@ const publicUrl = computed(() =>
 );
 let publishTimeout: number | null = null;
 let pollInterval: number | null = null;
+let displayInterval: number | null = null;
+const nowMs = ref(Date.now());
 
 const pollIntervalMs = getPollIntervalMs();
 
@@ -102,16 +115,81 @@ const openControlsInNewTab = () => {
 };
 
 const syncLocalRefsFromStorage = () => {
-  localTeam.value = localStorage.getItem("local-team") || "Equipo Local";
-  visitTeam.value = localStorage.getItem("visit-team") || "Equipo Visita";
-  goalLocal.value = Number(localStorage.getItem("goal-local") || 0);
-  goalVisit.value = Number(localStorage.getItem("goal-visit") || 0);
-  gamePeriod.value = Number(localStorage.getItem("game-period") || 1);
-  timeString.value = localStorage.getItem("time-game") || "20:00";
+  scoreboardStore.hydrateFromLocalStorage();
+  const snapshot = scoreboardStore.state;
+  localTeam.value = snapshot.localTeam;
+  visitTeam.value = snapshot.visitTeam;
+  goalLocal.value = snapshot.goalLocal;
+  goalVisit.value = snapshot.goalVisit;
+  gamePeriod.value = snapshot.gamePeriod;
+  isPaused.value = snapshot.isPaused;
+
+  if (
+    !isPaused.value &&
+    snapshot.updatedAt &&
+    !isControlsActiveWriter() &&
+    remoteSyncEnabled
+  ) {
+    const clocks = getRunningClocks(snapshot, nowMs.value);
+    timeString.value = clocks.timeGame;
+    penaltyString.value = clocks.penaltyGame;
+  } else {
+    timeString.value = snapshot.timeGame;
+    penaltyString.value = snapshot.penaltyGame;
+  }
+
   timeMilliseconds.value = convertToMilliseconds(timeString.value);
-  penaltyString.value = localStorage.getItem("penalty-game") || "00:00";
   penaltyMilliseconds.value = convertToMilliseconds(penaltyString.value);
-  isPaused.value = localStorage.getItem("isPaused") === "true";
+  formattedTime.value = formatTime(timeMilliseconds.value);
+  formattedPenalty.value = formatTime(penaltyMilliseconds.value);
+
+  if (parseTimeToMs(timeString.value) > 0) {
+    showTimeEndedAlert.value = false;
+  }
+};
+
+const showTimeEndedAlert = ref(false);
+
+const onGameTimeEnded = () => {
+  showTimeEndedAlert.value = true;
+};
+
+const tickScoreboardWhenStandalone = () => {
+  if (isPaused.value || isControlsActiveWriter()) return;
+
+  const previousTimeMs = timeMilliseconds.value;
+  const currentTimeMs = Math.max(0, timeMilliseconds.value - 1000);
+  const currentPenaltyMs = Math.max(0, penaltyMilliseconds.value - 1000);
+  const nextTime = formatTime(currentTimeMs);
+  const nextPenalty = formatTime(currentPenaltyMs);
+
+  scoreboardStore.updatePartial({ timeGame: nextTime, penaltyGame: nextPenalty });
+  timeMilliseconds.value = currentTimeMs;
+  penaltyMilliseconds.value = currentPenaltyMs;
+  formattedTime.value = nextTime;
+  formattedPenalty.value = nextPenalty;
+
+  handleGameTimeTick(previousTimeMs, currentTimeMs, isPaused.value);
+
+  scheduleRemotePublish();
+};
+
+const onScoreboardSync = () => {
+  syncLocalRefsFromStorage();
+  syncPenalizedFlags();
+};
+
+const applyMatchId = (matchId: string) => {
+  if (!matchId || matchId === activeMatchId.value) return;
+  activeMatchId.value = matchId;
+  router.replace({ path: "/", query: { matchId } });
+  scoreboardStore.hydrateFromLocalStorage();
+  onScoreboardSync();
+};
+
+const onMatchChanged = (event: Event) => {
+  const matchId = (event as CustomEvent<{ matchId: string }>).detail?.matchId;
+  if (matchId) applyMatchId(matchId);
 };
 
 const scheduleRemotePublish = () => {
@@ -170,75 +248,30 @@ const updateGamePeriod = () => {
 
 const timeString = ref<string>(localStorage.getItem("time-game") || "20:00");
 const timeMilliseconds = ref<number>(convertToMilliseconds(timeString.value));
-let timerInterval: any = null;
 
 const penaltyString = ref<string>(localStorage.getItem("penalty-game") || "0:00");
 const penaltyMilliseconds = ref<number>(convertToMilliseconds(penaltyString.value));
-let penaltyInterval: any = null;
 
 const isPaused = ref(localStorage.getItem("isPaused") === "true");
 
-// 🕐 Función que inicia el temporizador
-const startTimer = () => {
-  clearInterval(timerInterval); // Limpia cualquier temporizador previo
-
-  timerInterval = setInterval(() => {
-    if (!isPaused.value) {
-      // 🔴 SOLO RESTA TIEMPO SI NO ESTÁ EN PAUSA
-      timeMilliseconds.value -= 1000;
-      if (timeMilliseconds.value <= 0) {
-        clearInterval(timerInterval);
-        timeMilliseconds.value = 0;
-      }
-      localStorage.setItem("time-game", formatTime(timeMilliseconds.value));
-      scheduleRemotePublish();
-    }
-  }, 1000);
-};
-const startPenalty = () => {
-  clearInterval(penaltyInterval); // Limpia cualquier temporizador previo
-
-  penaltyInterval = setInterval(() => {
-    if (!isPaused.value) {
-      // 🔴 SOLO RESTA TIEMPO SI NO ESTÁ EN PAUSA
-      penaltyMilliseconds.value -= 1000;
-      if (penaltyMilliseconds.value <= 0) {
-        clearInterval(penaltyInterval);
-        penaltyMilliseconds.value = 0;
-      }
-      localStorage.setItem("penalty-game", formatTime(penaltyMilliseconds.value));
-      scheduleRemotePublish();
-    }
-  }, 1000);
-};
-
-// 🔄 Detecta cambios en localStorage (para actualizar el temporizador si se reinicia)
 const syncWithStorage = (event: StorageEvent) => {
-  if (event.key === "time-game") {
-    timeString.value = localStorage.getItem("time-game") || "20:00";
-    timeMilliseconds.value = convertToMilliseconds(timeString.value);
-    startTimer(); // Reinicia el temporizador con el nuevo tiempo
+  if (event.key === ACTIVE_MATCH_STORAGE_KEY) {
+    const matchId = localStorage.getItem(ACTIVE_MATCH_STORAGE_KEY)?.trim();
+    if (matchId) applyMatchId(matchId);
   }
-  if (event.key === "penalty-game") {
-    penaltyString.value = localStorage.getItem("penalty-game") || "00:00";
-    penaltyMilliseconds.value = convertToMilliseconds(penaltyString.value);
-    startPenalty(); // Reinicia el temporizador con el nuevo tiempo
+  if (
+    event.key === "time-game" ||
+    event.key === "penalty-game" ||
+    event.key === "scoreboard-updated-at" ||
+    event.key === "isPaused"
+  ) {
+    onScoreboardSync();
   }
   if (event.key === "local-team") {
     localTeam.value = localStorage.getItem("local-team") || "";
   }
   if (event.key === "visit-team") {
     visitTeam.value = localStorage.getItem("visit-team") || "Equipo Visita";
-  }
-  if (event.key === "isPaused") {
-    isPaused.value = localStorage.getItem("isPaused") === "true";
-    if (isPaused.value) {
-      clearInterval(timerInterval);
-      clearInterval(penaltyInterval);
-    } else {
-      startTimer();
-      startPenalty();
-    }
   }
   if (event.key === "penalized-local" || event.key === "penalized-visit" || event.key === "penalized-team") {
     syncPenalizedFlags();
@@ -263,21 +296,30 @@ onMounted(() => {
   window.addEventListener("storage", updateGoalVisit);
   window.addEventListener("storage", updateGamePeriod);
   window.addEventListener("storage", syncPenalizedFlags);
-  startTimer();
-  startPenalty();
-  window.addEventListener("storage", syncWithStorage); // Escucha cambios en localStorage
+  window.addEventListener("storage", syncWithStorage);
+  window.addEventListener(SCOREBOARD_SYNC_EVENT, onScoreboardSync);
+  window.addEventListener(MATCH_CHANGED_EVENT, onMatchChanged);
+  window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
+  displayInterval = window.setInterval(() => {
+    nowMs.value = Date.now();
+    if (isControlsActiveWriter()) {
+      syncLocalRefsFromStorage();
+    } else {
+      tickScoreboardWhenStandalone();
+    }
+  }, 1000);
   updateGoalLocal(); // Actualiza el valor inicial al montar la vista
   updateGoalVisit();
   updateGamePeriod();
   syncPenalizedFlags();
 
   const applyRemoteState = (remoteState: NonNullable<Awaited<ReturnType<typeof fetchMatchState>>>) => {
+    const localUpdatedAt = scoreboardStore.state.updatedAt;
+    if (!isRemoteStateNewer(remoteState, localUpdatedAt)) {
+      return;
+    }
     scoreboardStore.setState(remoteState);
-    writeScoreboardStateToLocalStorage(remoteState);
-    syncLocalRefsFromStorage();
-    syncPenalizedFlags();
-    startTimer();
-    startPenalty();
+    onScoreboardSync();
   };
 
   if (isRemoteSyncEnabled() && activeMatchId.value) {
@@ -297,8 +339,12 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  clearInterval(timerInterval);
-  clearInterval(penaltyInterval);
+  if (displayInterval) {
+    window.clearInterval(displayInterval);
+  }
+  window.removeEventListener(SCOREBOARD_SYNC_EVENT, onScoreboardSync);
+  window.removeEventListener(MATCH_CHANGED_EVENT, onMatchChanged);
+  window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
   window.removeEventListener("storage", syncWithStorage);
   window.removeEventListener("storage", updateGoalLocal);
   window.removeEventListener("storage", updateGoalVisit);
@@ -441,6 +487,21 @@ watch(penaltyMilliseconds, (newVal) => {
 .time {
   font-size: clamp(64px, 34.5cqh, 700px);
   line-height: 0.9;
+}
+
+.time.time-ended {
+  color: #ff4d4f;
+  animation: time-ended-blink 0.7s ease-in-out infinite;
+}
+
+@keyframes time-ended-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .period-container,

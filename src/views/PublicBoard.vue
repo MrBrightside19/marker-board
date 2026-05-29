@@ -15,7 +15,7 @@
       </div>
 
       <div class="center-panel">
-        <div class="clock">{{ clocks.timeGame }}</div>
+        <div class="clock" :class="{ 'time-ended': showTimeEndedAlert }">{{ clocks.timeGame }}</div>
         <div class="meta-group">
           <div class="meta-label">Periodo</div>
           <div class="meta-value">{{ snapshot.gamePeriod }}</div>
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { fetchMatchState, isRemoteSyncEnabled } from "../services/matchSync";
 import {
@@ -56,6 +56,8 @@ import {
 } from "../types/scoreboard";
 import { getPollIntervalMs } from "../config/sync";
 import { getRunningClocks } from "../utils/scoreboardClock";
+import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
+import { parseTimeToMs } from "../utils/scoreboardClock";
 
 const pollIntervalMs = getPollIntervalMs();
 
@@ -67,6 +69,29 @@ const matchId = computed(() => route.params.matchId?.toString() || "");
 const isRemoteConfigured = isRemoteSyncEnabled();
 
 const clocks = computed(() => getRunningClocks(snapshot.value, nowMs.value));
+const showTimeEndedAlert = ref(false);
+const prevTimeGame = ref("");
+
+const onGameTimeEnded = () => {
+  showTimeEndedAlert.value = true;
+};
+
+watch(
+  () => clocks.value.timeGame,
+  (time) => {
+    const previousMs = parseTimeToMs(prevTimeGame.value || time);
+    const nextMs = parseTimeToMs(time);
+
+    if (prevTimeGame.value) {
+      handleGameTimeTick(previousMs, nextMs, snapshot.value.isPaused);
+    }
+
+    if (time !== "00:00") {
+      showTimeEndedAlert.value = false;
+    }
+    prevTimeGame.value = time;
+  }
+);
 
 let tickInterval: number | null = null;
 let pollInterval: number | null = null;
@@ -92,9 +117,13 @@ onMounted(async () => {
 
   await refreshFromServer();
 
+  prevTimeGame.value = clocks.value.timeGame;
+
   tickInterval = window.setInterval(() => {
     nowMs.value = Date.now();
   }, 1000);
+
+  window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
 
   pollInterval = window.setInterval(() => {
     refreshFromServer();
@@ -102,6 +131,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
   if (tickInterval) window.clearInterval(tickInterval);
   if (pollInterval) window.clearInterval(pollInterval);
 });
@@ -155,6 +185,21 @@ onUnmounted(() => {
 .clock {
   font-size: clamp(84px, 14vw, 320px);
   line-height: 0.9;
+}
+
+.clock.time-ended {
+  color: #ff4d4f;
+  animation: time-ended-blink 0.7s ease-in-out infinite;
+}
+
+@keyframes time-ended-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .meta-group {

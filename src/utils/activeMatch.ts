@@ -1,4 +1,5 @@
-const STORAGE_KEY = "active-match-id";
+export const ACTIVE_MATCH_STORAGE_KEY = "active-match-id";
+const STORAGE_KEY = ACTIVE_MATCH_STORAGE_KEY;
 
 export function createMatchId(): string {
   return `partido-${Date.now().toString(36)}`;
@@ -23,6 +24,12 @@ export function resolveActiveMatchId(fromQuery?: string | null): string {
   return created;
 }
 
+export function setActiveMatchId(matchId: string): void {
+  localStorage.setItem(STORAGE_KEY, matchId.trim());
+}
+
 export function getPublicLiveUrl(matchId: string): string {
-  return `${window.location.origin}/marker-board/live/${matchId}`;
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const path = `${base}/live/${matchId}`.replace(/^\/\//, "/");
+  return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
