@@ -3,6 +3,7 @@ import { useRoute } from "vue-router";
 import { fetchMatchState, isRemoteSyncEnabled } from "../services/matchSync";
 import { DEFAULT_SCOREBOARD_STATE, type ScoreboardState } from "../types/scoreboard";
 import { getPollIntervalMs } from "../config/sync";
+import { getStoredActiveMatchId } from "../utils/activeMatch";
 import { getRunningClocks, parseTimeToMs } from "../utils/scoreboardClock";
 import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
 import { isSameScoreboardState } from "../utils/scoreboardSync";
@@ -19,8 +20,13 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   const showTimeEndedAlert = ref(false);
   const prevTimeGame = ref("");
 
-  const matchId = computed(() => route.params.matchId?.toString() || "");
-  const isRemoteConfigured = isRemoteSyncEnabled();
+  const matchId = computed(() => {
+    const fromRoute = route.params.matchId?.toString().trim() || "";
+    if (fromRoute) return fromRoute;
+    return getStoredActiveMatchId() || "";
+  });
+
+  const isRemoteConfigured = computed(() => isRemoteSyncEnabled());
   const clocks = computed(() => getRunningClocks(snapshot.value, nowMs.value));
 
   const showPowerPlayLocal = computed(
@@ -37,8 +43,29 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   let tickInterval: number | null = null;
   let pollInterval: number | null = null;
 
+  function stopTimers() {
+    if (tickInterval !== null) {
+      window.clearInterval(tickInterval);
+      tickInterval = null;
+    }
+    if (pollInterval !== null) {
+      window.clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  function startTimers() {
+    stopTimers();
+    tickInterval = window.setInterval(() => {
+      nowMs.value = Date.now();
+    }, 1000);
+    pollInterval = window.setInterval(() => {
+      void refreshFromServer();
+    }, pollIntervalMs);
+  }
+
   async function refreshFromServer() {
-    if (!matchId.value) return;
+    if (!matchId.value || !isRemoteSyncEnabled()) return;
 
     const result = await fetchMatchState(matchId.value);
     if (!result) {
@@ -50,6 +77,7 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
 
     loadError.value = "";
     const unchanged =
+      Boolean(result.serverUpdatedAt) &&
       lastServerRevision.value === result.serverUpdatedAt &&
       isSameScoreboardState(snapshot.value, result.state);
 
@@ -85,44 +113,43 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   );
 
   function onVisibilityChange() {
-    if (document.visibilityState === "visible" && matchId.value && isRemoteConfigured) {
+    if (document.visibilityState === "visible" && matchId.value && isRemoteSyncEnabled()) {
       void refreshFromServer();
     }
   }
 
+  watch(
+    () => ({ id: matchId.value, remote: isRemoteSyncEnabled() }),
+    (next, prev) => {
+      if (!next.id || !next.remote) {
+        stopTimers();
+        return;
+      }
+
+      const idChanged = !prev || prev.id !== next.id;
+      if (idChanged) {
+        loadError.value = "";
+        lastServerRevision.value = "";
+        snapshot.value = { ...DEFAULT_SCOREBOARD_STATE };
+      }
+
+      startTimers();
+      void refreshFromServer().then(() => {
+        prevTimeGame.value = clocks.value.timeGame;
+      });
+    },
+    { immediate: true }
+  );
+
   onMounted(() => {
-    if (!matchId.value || !isRemoteConfigured) return;
-
-    tickInterval = window.setInterval(() => {
-      nowMs.value = Date.now();
-    }, 1000);
-
-    pollInterval = window.setInterval(() => {
-      void refreshFromServer();
-    }, pollIntervalMs);
-
     window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
     document.addEventListener("visibilitychange", onVisibilityChange);
-
-    void refreshFromServer().then(() => {
-      prevTimeGame.value = clocks.value.timeGame;
-    });
-  });
-
-  watch(matchId, async (nextId, prevId) => {
-    if (!nextId || nextId === prevId || !isRemoteConfigured) return;
-    loadError.value = "";
-    lastServerRevision.value = "";
-    snapshot.value = { ...DEFAULT_SCOREBOARD_STATE };
-    await refreshFromServer();
-    prevTimeGame.value = clocks.value.timeGame;
   });
 
   onUnmounted(() => {
     document.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
-    if (tickInterval) window.clearInterval(tickInterval);
-    if (pollInterval) window.clearInterval(pollInterval);
+    stopTimers();
   });
 
   return {

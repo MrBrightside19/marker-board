@@ -17,10 +17,10 @@
         <!-- Local (izquierda) -->
         <div class="team-stack team-local">
           <div class="team-main">
-            <div class="team-identity">
-              <div class="team-logo" aria-hidden="true">
-                <span class="team-logo-fallback">{{ localInitials }}</span>
-              </div>
+            <div class="team-logo team-logo--edge team-logo--edge-left" aria-hidden="true">
+              <span class="team-logo-fallback">{{ localInitials }}</span>
+            </div>
+            <div class="team-body">
               <span class="team-name">{{ snapshot.localTeam }}</span>
             </div>
             <span class="team-score">{{ snapshot.goalLocal }}</span>
@@ -46,11 +46,11 @@
         <div class="team-stack team-visit">
           <div class="team-main team-main--visit">
             <span class="team-score">{{ snapshot.goalVisit }}</span>
-            <div class="team-identity team-identity--visit">
+            <div class="team-body team-body--visit">
               <span class="team-name">{{ snapshot.visitTeam }}</span>
-              <div class="team-logo" aria-hidden="true">
-                <span class="team-logo-fallback">{{ visitInitials }}</span>
-              </div>
+            </div>
+            <div class="team-logo team-logo--edge team-logo--edge-right" aria-hidden="true">
+              <span class="team-logo-fallback">{{ visitInitials }}</span>
             </div>
           </div>
           <div v-if="powerPlayOnVisit" class="pp-banner">
@@ -169,11 +169,11 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
 
 .team-main {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 12px;
-  min-height: 56px;
-  padding: 10px 14px;
+  min-height: 72px;
+  padding: 0;
   color: #fff;
 }
 
@@ -181,31 +181,32 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
   flex-direction: row;
 }
 
-.team-identity {
+.team-body {
   display: flex;
   align-items: center;
-  gap: 10px;
   min-width: 0;
   flex: 1 1 auto;
+  padding: 10px 12px;
 }
 
-.team-identity--visit {
+.team-body--visit {
   justify-content: flex-end;
 }
 
 .team-logo {
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px dashed rgba(255, 255, 255, 0.35);
+  align-self: stretch;
+  height: 100%;
+  aspect-ratio: 1;
+  width: auto;
+  min-width: 56px;
+  background: rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  box-sizing: border-box;
 
-  /* Cuando haya logo real: <img class="team-logo-img" /> */
   :deep(.team-logo-img) {
     width: 100%;
     height: 100%;
@@ -213,30 +214,47 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
   }
 }
 
+.team-logo--edge-left {
+  border-left: 4px solid rgba(255, 255, 255, 0.85);
+  border-radius: 12px 0 0 0;
+}
+
+.team-logo--edge-right {
+  border-right: 4px solid rgba(255, 255, 255, 0.85);
+  border-radius: 0 12px 0 0;
+}
+
 .team-logo-fallback {
-  font-size: 13px;
+  font-size: clamp(16px, 2vw, 22px);
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .team-name {
-  font-size: clamp(14px, 1.8vw, 18px);
+  font-size: clamp(20px, 2.6vw, 28px);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .team-score {
   flex: 0 0 auto;
+  align-self: center;
+  padding-right: 14px;
   font-size: clamp(32px, 4.5vw, 44px);
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.team-main--visit .team-score {
+  padding-right: 0;
+  padding-left: 14px;
 }
 
 .pp-banner {

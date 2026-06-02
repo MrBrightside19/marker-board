@@ -366,6 +366,7 @@ const publishOptions = () => {
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
 let remoteHeartbeat: number | null = null;
+let lastPublishErrorToastAt = 0;
 
 /** Sincroniza UI → store antes de publicar (goles, nombres, reloj, penalidades). */
 function syncControlsToStore() {
@@ -395,7 +396,11 @@ async function pushRemoteState(showError = false) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : "No se pudo publicar el marcador";
     console.error("[controls] publish", msg);
-    if (showError) message.error(msg);
+    const now = Date.now();
+    if (showError || now - lastPublishErrorToastAt > 30_000) {
+      message.error(msg);
+      lastPublishErrorToastAt = now;
+    }
   }
 }
 

@@ -60,12 +60,13 @@ export async function fetchMatchState(matchId: string): Promise<MatchRemoteSnaps
     return null;
   }
 
-  if (!data?.state || !data.updated_at) return null;
+  if (!data?.state) return null;
 
   const raw = data.state as ScoreboardState;
+  const normalized = normalizeScoreboardState(raw);
   return {
-    state: normalizeScoreboardState(raw),
-    serverUpdatedAt: data.updated_at,
+    state: normalized,
+    serverUpdatedAt: data.updated_at ?? normalized.updatedAt ?? "",
   };
 }
 

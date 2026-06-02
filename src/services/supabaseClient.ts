@@ -13,36 +13,6 @@ export function isSupabaseConfigured(): boolean {
   return Boolean(url && anonKey);
 }
 
-/** Copia headers del Request/init sin perder apikey (requerido por Supabase). */
-function mergeFetchHeaders(
-  input: RequestInfo | URL,
-  init: RequestInit | undefined,
-  apiKey: string
-): Headers {
-  const headers = new Headers();
-
-  if (input instanceof Request) {
-    input.headers.forEach((value, key) => {
-      headers.set(key, value);
-    });
-  }
-
-  if (init?.headers) {
-    new Headers(init.headers).forEach((value, key) => {
-      headers.set(key, value);
-    });
-  }
-
-  if (!headers.has("apikey")) {
-    headers.set("apikey", apiKey);
-  }
-
-  headers.set("Cache-Control", "no-cache");
-  headers.set("Pragma", "no-cache");
-
-  return headers;
-}
-
 export function getSupabase(): SupabaseClient | null {
   if (client) return client;
   const { url, anonKey } = getEnv();
@@ -56,13 +26,9 @@ export function getSupabase(): SupabaseClient | null {
     global: {
       headers: {
         apikey: anonKey,
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       },
-      fetch: (input, init) =>
-        fetch(input, {
-          ...init,
-          cache: "no-store",
-          headers: mergeFetchHeaders(input, init, anonKey),
-        }),
     },
   });
   return client;
