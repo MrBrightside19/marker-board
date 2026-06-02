@@ -219,8 +219,7 @@ import {
 import { setMatchLiveStatus } from "../services/liveMatchesService";
 import {
   createMatchId,
-  getActiveCourt,
-  getActiveTournamentId,
+  clearActiveTournamentSession,
   getPublicLiveUrl,
   getOverlayUrl,
   resolveActiveMatchId,
@@ -246,7 +245,6 @@ import { useAuthStore } from "../stores/auth";
 import type { TournamentMatch } from "../types/tournament";
 import {
   fetchTournamentControlsContext,
-  fetchTournamentControlsContextByTournamentId,
   finishTournamentMatch,
   startTournamentMatch,
   type TournamentControlsContext,
@@ -285,7 +283,7 @@ const scoreboardStore = useScoreboardStore();
 const auth = useAuthStore();
 const activeMatchId = ref("");
 const remoteSyncEnabled = isRemoteSyncEnabled();
-const activeTournamentId = ref<string | null>(getActiveTournamentId());
+const activeTournamentId = ref<string | null>(null);
 const tournamentContext = ref<TournamentControlsContext | null>(null);
 const loadingTournament = ref(false);
 const advancingMatch = ref(false);
@@ -309,7 +307,7 @@ async function copyOverlayUrl() {
   }
 }
 
-const isTournamentMode = computed(() => Boolean(activeTournamentId.value));
+const isTournamentMode = computed(() => Boolean(tournamentContext.value));
 const hasUpcomingMatch = computed(
   () => (tournamentContext.value?.upcomingMatches.length ?? 0) > 0
 );
@@ -357,8 +355,8 @@ const publishOptions = () => {
   if (auth.profile && auth.userId) {
     opts.organizerId = auth.userId;
   }
-  if (activeTournamentId.value) {
-    opts.tournamentId = activeTournamentId.value;
+  if (tournamentContext.value) {
+    opts.tournamentId = tournamentContext.value.tournament.id;
   }
   return opts;
 };
@@ -430,28 +428,28 @@ const flushRemotePublish = () => {
 };
 
 async function loadTournamentContext() {
-  if (!remoteSyncEnabled || !activeMatchId.value) {
-    if (!activeTournamentId.value) {
-      tournamentContext.value = null;
-    }
+  if (!activeMatchId.value) {
+    tournamentContext.value = null;
+    activeTournamentId.value = null;
+    return;
+  }
+
+  if (!remoteSyncEnabled) {
+    tournamentContext.value = null;
+    activeTournamentId.value = null;
     return;
   }
 
   loadingTournament.value = true;
   try {
-    let ctx = await fetchTournamentControlsContext(activeMatchId.value);
-    if (!ctx && activeTournamentId.value) {
-      ctx = await fetchTournamentControlsContextByTournamentId(
-        activeTournamentId.value,
-        activeMatchId.value,
-        getActiveCourt() ?? tournamentContext.value?.court
-      );
-    }
+    const ctx = await fetchTournamentControlsContext(activeMatchId.value);
     if (ctx) {
       activeTournamentId.value = ctx.tournament.id;
       setActiveTournamentId(ctx.tournament.id);
       tournamentContext.value = ctx;
-    } else if (!activeTournamentId.value) {
+    } else {
+      activeTournamentId.value = null;
+      clearActiveTournamentSession();
       tournamentContext.value = null;
     }
   } finally {
@@ -834,7 +832,7 @@ const startNewMatch = async () => {
   activeMatchId.value = newMatchId;
   scoreboardStore.setState(freshState);
   activeTournamentId.value = null;
-  setActiveTournamentId(null);
+  clearActiveTournamentSession();
   tournamentContext.value = null;
 
   penalizedLocal.value = false;
@@ -918,7 +916,6 @@ onMounted(async () => {
     typeof route.query.matchId === "string" ? route.query.matchId : null
   );
   activeMatchId.value = matchId;
-  activeTournamentId.value = getActiveTournamentId();
   if (route.query.matchId !== matchId) {
     router.replace({ path: "/controls", query: { matchId } });
   }

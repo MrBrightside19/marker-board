@@ -46,6 +46,12 @@ export function setActiveTournamentId(tournamentId: string | null): void {
   }
 }
 
+/** Limpia sesión de torneo (partido suelto u otro torneo). */
+export function clearActiveTournamentSession(): void {
+  setActiveTournamentId(null);
+  setActiveCourt(null);
+}
+
 function buildAppUrl(pathSegment: string): string {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   const path = `${base}${pathSegment}`.replace(/^\/\//, "/");

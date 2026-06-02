@@ -291,7 +291,7 @@ import {
   type SportId,
 } from "../types/sport";
 import { getRunningClocks } from "../utils/scoreboardClock";
-import { createMatchId, setActiveMatchId } from "../utils/activeMatch";
+import { clearActiveTournamentSession, createMatchId, setActiveMatchId } from "../utils/activeMatch";
 import { registerMatchRecord } from "../services/liveMatchesService";
 import { createFreshBasketballState, useBasketballScoreboardStore } from "../stores/basketballScoreboard";
 import { isBasketballScoreboardState } from "../types/basketballScoreboard";
@@ -453,6 +453,7 @@ async function startNewOrganizerMatch() {
   startingMatch.value = true;
   try {
     const matchId = createMatchId();
+    clearActiveTournamentSession();
 
     if (selectedSportId.value === "basquet") {
       const state = createFreshBasketballState({
@@ -469,6 +470,7 @@ async function startNewOrganizerMatch() {
         state,
         organizerId: auth.userId,
         title: `${state.localTeam} vs ${state.visitTeam}`,
+        tournamentId: null,
       });
 
       await router.push(basketballBoardRoute(matchId));
@@ -489,6 +491,7 @@ async function startNewOrganizerMatch() {
       state,
       organizerId: auth.userId,
       title: `${state.localTeam} vs ${state.visitTeam}`,
+      tournamentId: null,
     });
 
     await router.push(boardRoute(matchId));
