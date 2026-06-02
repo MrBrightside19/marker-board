@@ -19,11 +19,16 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   const loadError = ref("");
   const showTimeEndedAlert = ref(false);
   const prevTimeGame = ref("");
+  const isPolling = ref(false);
+  const lastSyncAt = ref<number | null>(null);
+  const fetchCount = ref(0);
 
   const matchId = computed(() => {
-    const fromRoute = route.params.matchId?.toString().trim() || "";
-    if (fromRoute) return fromRoute;
-    return getStoredActiveMatchId() || "";
+    const param = route.params.matchId;
+    const fromRoute = (Array.isArray(param) ? param[0] : param)?.toString().trim() || "";
+    if (fromRoute) return decodeURIComponent(fromRoute);
+    const stored = getStoredActiveMatchId();
+    return stored ? decodeURIComponent(stored) : "";
   });
 
   const isRemoteConfigured = computed(() => isRemoteSyncEnabled());
@@ -44,6 +49,7 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   let pollInterval: number | null = null;
 
   function stopTimers() {
+    isPolling.value = false;
     if (tickInterval !== null) {
       window.clearInterval(tickInterval);
       tickInterval = null;
@@ -55,39 +61,69 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   }
 
   function startTimers() {
-    stopTimers();
+    if (pollInterval !== null) return;
+    isPolling.value = true;
+
     tickInterval = window.setInterval(() => {
       nowMs.value = Date.now();
     }, 1000);
+
     pollInterval = window.setInterval(() => {
       void refreshFromServer();
     }, pollIntervalMs);
   }
 
-  async function refreshFromServer() {
-    if (!matchId.value || !isRemoteSyncEnabled()) return;
+  function setupPolling() {
+    stopTimers();
 
-    const result = await fetchMatchState(matchId.value);
-    if (!result) {
-      if (!snapshot.value.updatedAt) {
-        loadError.value = "No se encontró el partido en el servidor.";
-      }
+    if (!matchId.value || !isRemoteSyncEnabled()) {
       return;
     }
 
-    loadError.value = "";
-    const unchanged =
-      Boolean(result.serverUpdatedAt) &&
-      lastServerRevision.value === result.serverUpdatedAt &&
-      isSameScoreboardState(snapshot.value, result.state);
+    startTimers();
+    void refreshFromServer().then(() => {
+      prevTimeGame.value = clocks.value.timeGame;
+    });
+  }
 
-    if (!unchanged) {
-      lastServerRevision.value = result.serverUpdatedAt;
-      snapshot.value = result.state;
+  async function refreshFromServer() {
+    const id = matchId.value;
+    if (!id || !isRemoteSyncEnabled()) return;
+
+    fetchCount.value += 1;
+    if (import.meta.env.DEV) {
+      console.debug(`[live] poll #${fetchCount.value}`, id);
     }
 
-    if (options?.documentTitle) {
-      document.title = options.documentTitle;
+    try {
+      const result = await fetchMatchState(id);
+      lastSyncAt.value = Date.now();
+
+      if (!result) {
+        if (!snapshot.value.updatedAt) {
+          loadError.value = "No se encontró el partido en el servidor.";
+        }
+        return;
+      }
+
+      loadError.value = "";
+      const unchanged =
+        Boolean(result.serverUpdatedAt) &&
+        lastServerRevision.value === result.serverUpdatedAt &&
+        isSameScoreboardState(snapshot.value, result.state);
+
+      if (!unchanged) {
+        lastServerRevision.value = result.serverUpdatedAt;
+        snapshot.value = result.state;
+      }
+
+      if (options?.documentTitle) {
+        document.title = options.documentTitle;
+      }
+    } catch (error) {
+      console.error("[live] poll error", error);
+      loadError.value =
+        error instanceof Error ? error.message : "Error al leer el marcador del servidor.";
     }
   }
 
@@ -119,31 +155,20 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
   }
 
   watch(
-    () => ({ id: matchId.value, remote: isRemoteSyncEnabled() }),
-    (next, prev) => {
-      if (!next.id || !next.remote) {
-        stopTimers();
-        return;
-      }
-
-      const idChanged = !prev || prev.id !== next.id;
-      if (idChanged) {
-        loadError.value = "";
-        lastServerRevision.value = "";
-        snapshot.value = { ...DEFAULT_SCOREBOARD_STATE };
-      }
-
-      startTimers();
-      void refreshFromServer().then(() => {
-        prevTimeGame.value = clocks.value.timeGame;
-      });
-    },
-    { immediate: true }
+    () => matchId.value,
+    (nextId, prevId) => {
+      if (!nextId || nextId === prevId) return;
+      loadError.value = "";
+      lastServerRevision.value = "";
+      snapshot.value = { ...DEFAULT_SCOREBOARD_STATE };
+      setupPolling();
+    }
   );
 
   onMounted(() => {
     window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    setupPolling();
   });
 
   onUnmounted(() => {
@@ -158,11 +183,14 @@ export function useRemoteHockeyBoard(options?: { documentTitle?: string }) {
     clocks,
     loadError,
     isRemoteConfigured,
+    isPolling,
+    lastSyncAt,
+    fetchCount,
+    pollIntervalMs,
     showTimeEndedAlert,
     showPowerPlayLocal,
     showPowerPlayVisit,
     showThreeOnThree,
     showPenaltyClock,
-    pollIntervalMs,
   };
 }

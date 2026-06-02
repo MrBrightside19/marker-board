@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isSupabaseRestConfigured } from "./supabaseRest";
 
 let client: SupabaseClient | null = null;
 
@@ -9,8 +10,7 @@ function getEnv() {
 }
 
 export function isSupabaseConfigured(): boolean {
-  const { url, anonKey } = getEnv();
-  return Boolean(url && anonKey);
+  return isSupabaseRestConfigured();
 }
 
 export function getSupabase(): SupabaseClient | null {

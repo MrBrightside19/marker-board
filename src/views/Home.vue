@@ -297,12 +297,14 @@ import { createFreshBasketballState, useBasketballScoreboardStore } from "../sto
 import { isBasketballScoreboardState } from "../types/basketballScoreboard";
 import { getBasketballRunningClock } from "../utils/basketballClock";
 import {
-  basketballBoardRoute,
   basketballLiveRoute,
-  boardRoute,
   liveRoute as liveRouteUtil,
   tournamentPublicRoute as tournamentPublicRouteUtil,
 } from "../utils/routes";
+import {
+  openBasketballOperatorSession,
+  openHockeyOperatorSession,
+} from "../utils/operatorWindows";
 
 const router = useRouter();
 const route = useRoute();
@@ -451,10 +453,10 @@ async function startNewOrganizerMatch() {
   }
 
   startingMatch.value = true;
-  try {
-    const matchId = createMatchId();
-    clearActiveTournamentSession();
+  const matchId = createMatchId();
+  clearActiveTournamentSession();
 
+  try {
     if (selectedSportId.value === "basquet") {
       const state = createFreshBasketballState({
         localTeam: "Equipo Local",
@@ -464,16 +466,19 @@ async function startNewOrganizerMatch() {
 
       setActiveMatchId(matchId);
       basketballStore.setState(state);
+      openBasketballOperatorSession(router, matchId);
 
-      await registerMatchRecord({
+      void registerMatchRecord({
         matchId,
         state,
-        organizerId: auth.userId,
+        organizerId: auth.userId ?? undefined,
         title: `${state.localTeam} vs ${state.visitTeam}`,
         tournamentId: null,
+      }).catch((error) => {
+        message.error(
+          error instanceof Error ? error.message : "No se pudo registrar el partido en el servidor"
+        );
       });
-
-      await router.push(basketballBoardRoute(matchId));
       return;
     }
 
@@ -485,16 +490,19 @@ async function startNewOrganizerMatch() {
 
     setActiveMatchId(matchId);
     scoreboardStore.setState(state);
+    openHockeyOperatorSession(router, matchId);
 
-    await registerMatchRecord({
+    void registerMatchRecord({
       matchId,
       state,
-      organizerId: auth.userId,
+      organizerId: auth.userId ?? undefined,
       title: `${state.localTeam} vs ${state.visitTeam}`,
       tournamentId: null,
+    }).catch((error) => {
+      message.error(
+        error instanceof Error ? error.message : "No se pudo registrar el partido en el servidor"
+      );
     });
-
-    await router.push(boardRoute(matchId));
   } finally {
     startingMatch.value = false;
   }

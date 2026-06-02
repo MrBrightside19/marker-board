@@ -1,7 +1,7 @@
 import { normalizeScoreboardState } from "../stores/scoreboard";
 import type { ScoreboardState } from "../types/scoreboard";
 import { registerMatchRecord } from "./liveMatchesService";
-import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
+import { isSupabaseRestConfigured, restGetMatchRow } from "./supabaseRest";
 
 export type MatchRemoteSnapshot = {
   state: ScoreboardState;
@@ -9,7 +9,7 @@ export type MatchRemoteSnapshot = {
 };
 
 export function isRemoteSyncEnabled(): boolean {
-  return isSupabaseConfigured();
+  return isSupabaseRestConfigured();
 }
 
 export async function publishMatchState(
@@ -29,14 +29,14 @@ export async function publishMatchState(
     state,
     title: options?.title,
   };
+  if (options?.isLive !== undefined) {
+    record.isLive = options.isLive;
+  }
   if (options?.organizerId) {
     record.organizerId = options.organizerId;
   }
   if (options?.tournamentId !== undefined) {
     record.tournamentId = options.tournamentId;
-  }
-  if (options?.isLive !== undefined) {
-    record.isLive = options.isLive;
   }
 
   const ok = await registerMatchRecord(record);
@@ -45,32 +45,26 @@ export async function publishMatchState(
   }
 }
 
+/** Lee el marcador por REST (GET explícito, aparece en Network). */
 export async function fetchMatchState(matchId: string): Promise<MatchRemoteSnapshot | null> {
-  const supabase = getSupabase();
-  if (!supabase || !matchId) return null;
+  if (!matchId) return null;
+  if (!isSupabaseRestConfigured()) {
+    throw new Error("Supabase no configurado (VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY)");
+  }
 
-  const { data, error } = await supabase
-    .from("matches")
-    .select("state, updated_at")
-    .eq("id", matchId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[matchSync] fetch error", error.message);
+  const row = await restGetMatchRow(matchId);
+  if (!row?.state) {
     return null;
   }
 
-  if (!data?.state) return null;
-
-  const raw = data.state as ScoreboardState;
+  const raw = row.state as ScoreboardState;
   const normalized = normalizeScoreboardState(raw);
   return {
     state: normalized,
-    serverUpdatedAt: data.updated_at ?? normalized.updatedAt ?? "",
+    serverUpdatedAt: row.updated_at ?? normalized.updatedAt ?? "",
   };
 }
 
-/** Compat: solo el estado (p. ej. Controles al iniciar). */
 export async function fetchMatchStateLegacy(matchId: string): Promise<ScoreboardState | null> {
   const snapshot = await fetchMatchState(matchId);
   return snapshot?.state ?? null;

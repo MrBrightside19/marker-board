@@ -1,5 +1,6 @@
 <template>
   <div class="controls-page" :class="{ 'has-tournament': isTournamentMode }">
+    <OperatorCloseGuardBanner :needs-arm-click="needsArmClick" :arm-now="armNow" />
     <section class="controls-panel">
       <div class="controls-toolbar">
         <div v-if="activeMatchId && remoteSyncEnabled" class="match-panel-info">
@@ -233,6 +234,8 @@ import {
   resetGameTimeAlertCooldown,
 } from "../utils/gameTimeAlert";
 import { formatTime, parseTimeToMs } from "../utils/scoreboardClock";
+import OperatorCloseGuardBanner from "../components/OperatorCloseGuardBanner.vue";
+import { useOperatorCloseGuard } from "../composables/useOperatorCloseGuard";
 import {
   claimControlsWriter,
   isRemoteStateNewer,
@@ -282,7 +285,7 @@ const router = useRouter();
 const scoreboardStore = useScoreboardStore();
 const auth = useAuthStore();
 const activeMatchId = ref("");
-const remoteSyncEnabled = isRemoteSyncEnabled();
+const remoteSyncEnabled = computed(() => isRemoteSyncEnabled());
 const activeTournamentId = ref<string | null>(null);
 const tournamentContext = ref<TournamentControlsContext | null>(null);
 const loadingTournament = ref(false);
@@ -366,6 +369,8 @@ let controlsTicker: number | null = null;
 let remoteHeartbeat: number | null = null;
 let lastPublishErrorToastAt = 0;
 
+const { needsArmClick, armNow } = useOperatorCloseGuard();
+
 /** Sincroniza UI → store antes de publicar (goles, nombres, reloj, penalidades). */
 function syncControlsToStore() {
   touchControlsWriterHeartbeat();
@@ -434,7 +439,7 @@ async function loadTournamentContext() {
     return;
   }
 
-  if (!remoteSyncEnabled) {
+  if (!remoteSyncEnabled.value) {
     tournamentContext.value = null;
     activeTournamentId.value = null;
     return;
@@ -708,7 +713,7 @@ async function finishCurrentTournamentMatchIfNeeded() {
 
   await finishTournamentMatch(current.id, finishedState);
 
-  if (remoteSyncEnabled) {
+  if (remoteSyncEnabled.value) {
     await publishMatchState(finishedMatchId, finishedState, {
       organizerId: auth.userId,
       title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
@@ -761,7 +766,7 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
     notifyScoreboardSync();
     notifyMatchChanged(matchId);
 
-    if (remoteSyncEnabled) {
+    if (remoteSyncEnabled.value) {
       syncControlsToStore();
       await publishMatchState(matchId, scoreboardStore.state, {
         ...publishOptions(),
@@ -844,7 +849,7 @@ const startNewMatch = async () => {
   notifyScoreboardSync();
   notifyMatchChanged(newMatchId);
 
-  if (remoteSyncEnabled) {
+  if (remoteSyncEnabled.value) {
     await publishMatchState(newMatchId, scoreboardStore.state, publishOptions());
   }
 };
@@ -929,15 +934,19 @@ onMounted(async () => {
   await auth.init();
   await loadTournamentContext();
 
-  if (remoteSyncEnabled && activeMatchId.value) {
-    const remote = await fetchMatchState(activeMatchId.value);
-    if (
-      remote &&
-      isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)
-    ) {
-      scoreboardStore.setState(normalizeScoreboardState(remote.state));
-      syncUiFromLocalStorage();
-      notifyScoreboardSync();
+  if (remoteSyncEnabled.value && activeMatchId.value) {
+    try {
+      const remote = await fetchMatchState(activeMatchId.value);
+      if (
+        remote &&
+        isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)
+      ) {
+        scoreboardStore.setState(normalizeScoreboardState(remote.state));
+        syncUiFromLocalStorage();
+        notifyScoreboardSync();
+      }
+    } catch (error) {
+      console.error("[controls] initial fetch", error);
     }
     await pushRemoteState(true);
 

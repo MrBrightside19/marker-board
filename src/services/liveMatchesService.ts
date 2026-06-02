@@ -6,6 +6,7 @@ import type { BasketballScoreboardState } from "../types/basketballScoreboard";
 import type { LiveMatchSummary } from "../types/liveMatch";
 import { DEFAULT_SPORT_ID, type SportId } from "../types/sport";
 import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
+import { isSupabaseRestConfigured, restUpsertMatch } from "./supabaseRest";
 
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 
@@ -196,8 +197,7 @@ export async function registerMatchRecord(options: {
   tournamentId?: string | null;
   isLive?: boolean;
 }): Promise<boolean> {
-  const supabase = getSupabase();
-  if (!supabase) return false;
+  if (!isSupabaseRestConfigured()) return false;
 
   const isBasketball = isBasketballScoreboardState(options.state);
   const normalized: ScoreboardState | BasketballScoreboardState = isBasketball
@@ -220,23 +220,26 @@ export async function registerMatchRecord(options: {
     row.organizer_id = options.organizerId;
   }
 
-  // No pisar tournament_id en cada tick si no se envía explícitamente
   if (options.tournamentId !== undefined) {
     row.tournament_id = options.tournamentId;
   }
 
-  let { error } = await supabase.from("matches").upsert(row, { onConflict: "id" });
-
-  if (error && options.organizerId) {
-    delete row.organizer_id;
-    ({ error } = await supabase.from("matches").upsert(row, { onConflict: "id" }));
-  }
-
-  if (error) {
-    console.error("[liveMatches] register", error.message);
+  try {
+    await restUpsertMatch(row);
+    return true;
+  } catch (error) {
+    if (options.organizerId) {
+      try {
+        delete row.organizer_id;
+        await restUpsertMatch(row);
+        return true;
+      } catch (retryError) {
+        console.error("[liveMatches] register retry", retryError);
+      }
+    }
+    console.error("[liveMatches] register", error);
     return false;
   }
-  return true;
 }
 
 export async function setMatchLiveStatus(matchId: string, isLive: boolean): Promise<void> {

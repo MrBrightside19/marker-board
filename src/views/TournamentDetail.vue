@@ -166,7 +166,8 @@ import {
 } from "../stores/scoreboard";
 import { getTournamentTemplateUrl, parseTournamentCsv } from "../utils/tournamentCsv";
 import { getSportById } from "../types/sport";
-import { getTournamentPublicUrl, openBoardInNewTab, tournamentPublicRoute as tournamentPublicRouteUtil } from "../utils/routes";
+import { getTournamentPublicUrl, tournamentPublicRoute as tournamentPublicRouteUtil } from "../utils/routes";
+import { openHockeyOperatorSession } from "../utils/operatorWindows";
 import { setActiveMatchId, setActiveTournamentId } from "../utils/activeMatch";
 import { formatCourtLabel } from "../utils/court";
 
@@ -265,15 +266,22 @@ async function openMarcadorTab(record: TournamentMatch) {
         visitTeam: record.visitTeam,
         timeGame: record.timeGame,
       });
-      await publishMatchState(matchId, state, {
+      writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
+      openHockeyOperatorSession(router, matchId);
+      void publishMatchState(matchId, state, {
         organizerId: auth.userId,
         tournamentId: tournament.value.id,
         isLive: true,
+      }).catch((error) => {
+        message.error(
+          error instanceof Error ? error.message : "No se pudo publicar el marcador"
+        );
       });
+      return;
     }
-    writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
 
-    openBoardInNewTab(router, matchId);
+    writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
+    openHockeyOperatorSession(router, matchId);
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo abrir el marcador");
   } finally {

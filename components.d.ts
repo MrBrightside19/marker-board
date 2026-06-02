@@ -37,6 +37,8 @@ declare module 'vue' {
     AUpload: typeof import('ant-design-vue/es')['Upload']
     AuthModal: typeof import('./src/components/auth/AuthModal.vue')['default']
     BasketballScoreBoard: typeof import('./src/components/basketball/BasketballScoreBoard.vue')['default']
+    LiveSyncStatus: typeof import('./src/components/LiveSyncStatus.vue')['default']
+    OperatorCloseGuardBanner: typeof import('./src/components/OperatorCloseGuardBanner.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScoreBoard: typeof import('./src/components/ScoreBoard.vue')['default']

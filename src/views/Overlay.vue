@@ -1,5 +1,13 @@
 <template>
   <div class="overlay-root">
+    <LiveSyncStatus
+      :match-id="matchId"
+      :is-remote-configured="isRemoteConfigured"
+      :is-polling="isPolling"
+      :fetch-count="fetchCount"
+      :poll-interval-ms="pollIntervalMs"
+      :last-sync-at="lastSyncAt"
+    />
     <div v-if="!matchId" class="overlay-hint">
       Abre esta vista con un enlace válido: <code>/overlay/:matchId</code> (desde Controles).
     </div>
@@ -8,11 +16,11 @@
       Sincronización remota no configurada. Define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
     </div>
 
-    <div v-else-if="loadError && !snapshot.updatedAt" class="overlay-hint">
-      {{ loadError }}
-    </div>
-
     <div v-else class="scoreboard-wrap">
+      <p v-if="loadError" class="overlay-sync-warning">{{ loadError }}</p>
+      <p v-else-if="!isPolling && isRemoteConfigured" class="overlay-sync-warning">
+        Iniciando sincronización…
+      </p>
       <div class="scoreboard-pill">
         <!-- Local (izquierda) -->
         <div class="team-stack team-local">
@@ -65,6 +73,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
+import LiveSyncStatus from "../components/LiveSyncStatus.vue";
 import { useRemoteHockeyBoard } from "../composables/useRemoteHockeyBoard";
 
 const {
@@ -73,6 +82,10 @@ const {
   clocks,
   loadError,
   isRemoteConfigured,
+  isPolling,
+  lastSyncAt,
+  fetchCount,
+  pollIntervalMs,
   showTimeEndedAlert,
   showPowerPlayLocal,
   showPowerPlayVisit,
@@ -145,6 +158,16 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
   color: #fff;
   background: $overlay-bg;
   border-radius: 8px;
+}
+
+.overlay-sync-warning {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(180, 30, 30, 0.85);
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
 }
 
 .scoreboard-wrap {

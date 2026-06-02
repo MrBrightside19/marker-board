@@ -2,10 +2,10 @@ import { normalizeBasketballState } from "../stores/basketballScoreboard";
 import type { BasketballScoreboardState } from "../types/basketballScoreboard";
 import { isBasketballScoreboardState } from "../types/basketballScoreboard";
 import { registerMatchRecord } from "./liveMatchesService";
-import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
+import { isSupabaseRestConfigured, restGetMatchRow } from "./supabaseRest";
 
 export function isBasketballRemoteSyncEnabled(): boolean {
-  return isSupabaseConfigured();
+  return isSupabaseRestConfigured();
 }
 
 export async function publishBasketballMatchState(
@@ -35,21 +35,15 @@ export async function publishBasketballMatchState(
 export async function fetchBasketballMatchState(
   matchId: string
 ): Promise<BasketballScoreboardState | null> {
-  const supabase = getSupabase();
-  if (!supabase || !matchId) return null;
+  if (!matchId || !isSupabaseRestConfigured()) return null;
 
-  const { data, error } = await supabase
-    .from("matches")
-    .select("state")
-    .eq("id", matchId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[basketballMatchSync] fetch error", error.message);
+  try {
+    const row = await restGetMatchRow(matchId);
+    const raw = row?.state;
+    if (!isBasketballScoreboardState(raw)) return null;
+    return normalizeBasketballState(raw);
+  } catch (error) {
+    console.error("[basketballMatchSync] fetch error", error);
     return null;
   }
-
-  const raw = data?.state;
-  if (!isBasketballScoreboardState(raw)) return null;
-  return normalizeBasketballState(raw);
 }

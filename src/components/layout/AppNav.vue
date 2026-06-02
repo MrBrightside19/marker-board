@@ -3,34 +3,58 @@
     <router-link to="/" class="nav-brand">Marcador Deportivo</router-link>
 
     <div class="nav-links">
-      <router-link
-        v-for="item in visibleItems"
-        :key="item.key"
-        :to="item.to"
-        class="nav-link"
-        :class="{ active: isActive(item) }"
-      >
-        {{ item.label }}
-      </router-link>
+      <template v-for="item in visibleItems" :key="item.key">
+        <a
+          v-if="item.openInNewTab"
+          :href="resolveHref(item)"
+          class="nav-link"
+          target="_blank"
+          rel="noopener noreferrer"
+          @click.prevent="openInNewTab(item)"
+        >
+          {{ item.label }}
+        </a>
+        <router-link
+          v-else
+          :to="item.to"
+          class="nav-link"
+          :class="{ active: isActive(item) }"
+        >
+          {{ item.label }}
+        </router-link>
+      </template>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { useRoute, type RouteLocationRaw } from "vue-router";
+import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { useAuthStore } from "../../stores/auth";
 import { getStoredActiveMatchId } from "../../utils/activeMatch";
-import { boardRoute, controlsRoute, basketballBoardRoute, basketballControlsRoute } from "../../utils/routes";
+import {
+  openBasketballBoardInNewTab,
+  openBasketballControlsInNewTab,
+  openHockeyBoardInNewTab,
+  openHockeyControlsInNewTab,
+} from "../../utils/operatorWindows";
+import {
+  boardRoute,
+  controlsRoute,
+  basketballBoardRoute,
+  basketballControlsRoute,
+} from "../../utils/routes";
 
 type NavItem = {
   key: string;
   label: string;
   to: RouteLocationRaw;
   organizerOnly?: boolean;
+  openInNewTab?: boolean;
 };
 
 const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
 
 onMounted(() => {
@@ -46,25 +70,63 @@ const visibleItems = computed((): NavItem[] => {
   if (auth.isOrganizer) {
     const matchId = getStoredActiveMatchId();
     items.push(
-      { key: "board", label: "Marcador TV", to: boardRoute(matchId ?? undefined), organizerOnly: true },
-      { key: "controls", label: "Controles", to: controlsRoute(matchId ?? undefined), organizerOnly: true },
+      {
+        key: "board",
+        label: "Marcador TV",
+        to: boardRoute(matchId ?? undefined),
+        organizerOnly: true,
+        openInNewTab: true,
+      },
+      {
+        key: "controls",
+        label: "Controles",
+        to: controlsRoute(matchId ?? undefined),
+        organizerOnly: true,
+        openInNewTab: true,
+      },
       {
         key: "basketball-board",
         label: "Marcador Básquet",
         to: basketballBoardRoute(matchId ?? undefined),
         organizerOnly: true,
+        openInNewTab: true,
       },
       {
         key: "basketball-controls",
         label: "Controles Básquet",
         to: basketballControlsRoute(matchId ?? undefined),
         organizerOnly: true,
+        openInNewTab: true,
       }
     );
   }
 
   return items.filter((item) => !item.organizerOnly || auth.isOrganizer);
 });
+
+function resolveHref(item: NavItem): string {
+  return router.resolve(item.to).href;
+}
+
+function openInNewTab(item: NavItem) {
+  const matchId = getStoredActiveMatchId() ?? undefined;
+  switch (item.key) {
+    case "board":
+      openHockeyBoardInNewTab(router, matchId);
+      break;
+    case "controls":
+      openHockeyControlsInNewTab(router, matchId);
+      break;
+    case "basketball-board":
+      openBasketballBoardInNewTab(router, matchId);
+      break;
+    case "basketball-controls":
+      openBasketballControlsInNewTab(router, matchId);
+      break;
+    default:
+      window.open(resolveHref(item), "_blank", "noopener,noreferrer");
+  }
+}
 
 function isActive(item: NavItem): boolean {
   const path = typeof item.to === "string" ? item.to : item.to.path ?? "";

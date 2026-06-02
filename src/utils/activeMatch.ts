@@ -60,12 +60,12 @@ function buildAppUrl(pathSegment: string): string {
 
 /** Live publico de un partido suelto (sin torneo). */
 export function getPublicLiveUrl(matchId: string): string {
-  return buildAppUrl(`/live/${matchId}`);
+  return buildAppUrl(`/live/${encodeURIComponent(matchId)}`);
 }
 
 /** Overlay (misma sync remota que el live). */
 export function getOverlayUrl(matchId: string): string {
-  return buildAppUrl(`/overlay/${matchId}`);
+  return buildAppUrl(`/overlay/${encodeURIComponent(matchId)}`);
 }
 
 /** Live publico de básquet. */

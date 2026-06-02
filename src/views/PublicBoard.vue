@@ -1,5 +1,13 @@
 <template>
   <div class="public-board font-digital">
+    <LiveSyncStatus
+      :match-id="matchId"
+      :is-remote-configured="isRemoteConfigured"
+      :is-polling="isPolling"
+      :fetch-count="fetchCount"
+      :poll-interval-ms="pollIntervalMs"
+      :last-sync-at="lastSyncAt"
+    />
     <div v-if="!matchId" class="status-message">
       Debes abrir esta vista con un enlace de live valido (/live/:matchId).
     </div>
@@ -7,8 +15,11 @@
       Sincronizacion remota no configurada. Define VITE_SUPABASE_URL y
       VITE_SUPABASE_ANON_KEY.
     </div>
-    <div v-else-if="loadError" class="status-message">{{ loadError }}</div>
     <div v-else class="board-content">
+      <p v-if="loadError" class="sync-warning">{{ loadError }}</p>
+      <p v-else-if="!isPolling && isRemoteConfigured" class="sync-warning">
+        Iniciando sincronización…
+      </p>
       <div class="team-panel left">
         <div class="team-name">{{ snapshot.localTeam }}</div>
         <div class="team-score">{{ snapshot.goalLocal }}</div>
@@ -47,10 +58,21 @@
 </template>
 
 <script setup lang="ts">
+import LiveSyncStatus from "../components/LiveSyncStatus.vue";
 import { useRemoteHockeyBoard } from "../composables/useRemoteHockeyBoard";
 
-const { matchId, snapshot, clocks, loadError, isRemoteConfigured, showTimeEndedAlert } =
-  useRemoteHockeyBoard({ documentTitle: "Marcador en vivo" });
+const {
+  matchId,
+  snapshot,
+  clocks,
+  loadError,
+  isRemoteConfigured,
+  isPolling,
+  lastSyncAt,
+  fetchCount,
+  pollIntervalMs,
+  showTimeEndedAlert,
+} = useRemoteHockeyBoard({ documentTitle: "Marcador en vivo" });
 </script>
 
 <style scoped lang="scss">
@@ -67,6 +89,20 @@ const { matchId, snapshot, clocks, loadError, isRemoteConfigured, showTimeEndedA
 .status-message {
   font-size: clamp(18px, 2.4vw, 36px);
   padding: 20px;
+  text-align: center;
+}
+
+.sync-warning {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 8px 16px;
+  background: rgba(180, 30, 30, 0.9);
+  color: #fff;
+  font-size: clamp(14px, 1.8vw, 22px);
   text-align: center;
 }
 

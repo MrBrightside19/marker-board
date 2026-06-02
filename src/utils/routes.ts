@@ -1,7 +1,5 @@
 /** Rutas con base /marker-board/ aplicada por vue-router */
 
-import type { Router } from "vue-router";
-
 export function boardRoute(matchId?: string) {
   return {
     path: "/board",
@@ -48,8 +46,4 @@ export function getTournamentPublicUrl(tournamentId: string): string {
   return `${window.location.origin}${base}/torneo/${tournamentId}`;
 }
 
-/** Abre el marcador TV en una pestaña nueva (para pantalla de cancha). */
-export function openBoardInNewTab(router: Router, matchId?: string): void {
-  const href = router.resolve(boardRoute(matchId)).href;
-  window.open(href, "_blank", "noopener,noreferrer");
-}
+export { openHockeyBoardInNewTab as openBoardInNewTab } from "./operatorWindows";
