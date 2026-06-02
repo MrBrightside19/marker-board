@@ -304,20 +304,21 @@ onMounted(async () => {
   syncLocalRefsFromStorage();
 
   if (remoteSyncEnabled && activeMatchId.value) {
-    const remoteState = await fetchMatchState(activeMatchId.value);
-    if (remoteState && isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)) {
-      scoreboardStore.setState(remoteState);
-      onScoreboardSync();
-    }
-
     pollInterval = window.setInterval(async () => {
       if (isControlsActiveWriter() || !activeMatchId.value) return;
       const remote = await fetchMatchState(activeMatchId.value);
-      if (remote && isRemoteStateNewer(remote, scoreboardStore.state.updatedAt)) {
-        scoreboardStore.setState(remote);
+      if (remote && isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)) {
+        scoreboardStore.setState(remote.state);
         onScoreboardSync();
       }
     }, pollIntervalMs);
+
+    void fetchMatchState(activeMatchId.value).then((remote) => {
+      if (remote && isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)) {
+        scoreboardStore.setState(remote.state);
+        onScoreboardSync();
+      }
+    });
   }
 
   window.addEventListener("storage", updateGoalLocal);

@@ -257,7 +257,8 @@ async function openMarcadorTab(record: TournamentMatch) {
     setActiveTournamentId(tournament.value.id);
     setActiveMatchId(matchId);
 
-    let state = await fetchMatchState(matchId);
+    const remote = await fetchMatchState(matchId);
+    let state = remote?.state;
     if (!state) {
       state = createFreshMatchState({
         localTeam: record.localTeam,

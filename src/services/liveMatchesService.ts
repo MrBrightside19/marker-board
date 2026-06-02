@@ -213,16 +213,24 @@ export async function registerMatchRecord(options: {
     state: { ...normalized, updatedAt: publishedAt },
     title,
     is_live: options.isLive ?? true,
-    organizer_id: options.organizerId ?? null,
     updated_at: new Date().toISOString(),
   };
+
+  if (options.organizerId) {
+    row.organizer_id = options.organizerId;
+  }
 
   // No pisar tournament_id en cada tick si no se envía explícitamente
   if (options.tournamentId !== undefined) {
     row.tournament_id = options.tournamentId;
   }
 
-  const { error } = await supabase.from("matches").upsert(row, { onConflict: "id" });
+  let { error } = await supabase.from("matches").upsert(row, { onConflict: "id" });
+
+  if (error && options.organizerId) {
+    delete row.organizer_id;
+    ({ error } = await supabase.from("matches").upsert(row, { onConflict: "id" }));
+  }
 
   if (error) {
     console.error("[liveMatches] register", error.message);

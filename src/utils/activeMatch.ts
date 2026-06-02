@@ -57,6 +57,11 @@ export function getPublicLiveUrl(matchId: string): string {
   return buildAppUrl(`/live/${matchId}`);
 }
 
+/** Overlay (misma sync remota que el live). */
+export function getOverlayUrl(matchId: string): string {
+  return buildAppUrl(`/overlay/${matchId}`);
+}
+
 /** Live publico de básquet. */
 export function getBasketballPublicLiveUrl(matchId: string): string {
   return buildAppUrl(`/basquet/live/${matchId}`);

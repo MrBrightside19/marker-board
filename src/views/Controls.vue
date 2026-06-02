@@ -13,6 +13,8 @@
           </span>
           <span v-else><strong>Partido:</strong> {{ activeMatchId }}</span>
           <a class="live-link" :href="publicUrl" target="_blank" rel="noopener">Live</a>
+          <a class="live-link" :href="overlayUrl" target="_blank" rel="noopener">Overlay</a>
+          <a-button size="small" @click="copyOverlayUrl">Copiar overlay</a-button>
         </div>
         <a-button
           type="primary"
@@ -208,6 +210,7 @@ import {
   normalizeScoreboardState,
   useScoreboardStore,
 } from "../stores/scoreboard";
+import { getPollIntervalMs } from "../config/sync";
 import {
   fetchMatchState,
   isRemoteSyncEnabled,
@@ -219,6 +222,7 @@ import {
   getActiveCourt,
   getActiveTournamentId,
   getPublicLiveUrl,
+  getOverlayUrl,
   resolveActiveMatchId,
   setActiveMatchId,
   setActiveTournamentId,
@@ -291,6 +295,20 @@ const publicUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
 
+const overlayUrl = computed(() =>
+  activeMatchId.value ? getOverlayUrl(activeMatchId.value) : ""
+);
+
+async function copyOverlayUrl() {
+  if (!overlayUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(overlayUrl.value);
+    message.success("URL del overlay copiada");
+  } catch {
+    message.error("No se pudo copiar la URL");
+  }
+}
+
 const isTournamentMode = computed(() => Boolean(activeTournamentId.value));
 const hasUpcomingMatch = computed(
   () => (tournamentContext.value?.upcomingMatches.length ?? 0) > 0
@@ -330,13 +348,15 @@ const normalizeGameMinutes = () => {
 const publishOptions = () => {
   const state = scoreboardStore.state;
   const opts: {
-    organizerId: string | null;
+    organizerId?: string;
     title: string;
     tournamentId?: string | null;
   } = {
-    organizerId: auth.userId,
     title: `${state.localTeam} vs ${state.visitTeam}`,
   };
+  if (auth.profile && auth.userId) {
+    opts.organizerId = auth.userId;
+  }
   if (activeTournamentId.value) {
     opts.tournamentId = activeTournamentId.value;
   }
@@ -345,14 +365,38 @@ const publishOptions = () => {
 
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
+let remoteHeartbeat: number | null = null;
 
-/** El reloj visible en UI debe estar en el store antes de publicar (evita reset en TV/live). */
-function syncClocksToStore() {
+/** Sincroniza UI → store antes de publicar (goles, nombres, reloj, penalidades). */
+function syncControlsToStore() {
   touchControlsWriterHeartbeat();
   scoreboardStore.updatePartial({
+    localTeam: local.value,
+    visitTeam: visit.value,
+    goalLocal: Number(localGoals.value) || 0,
+    goalVisit: Number(visitGoals.value) || 0,
+    gamePeriod: Number(gamePeriod.value) || 1,
     timeGame: formattedTime.value,
     penaltyGame: formattedPenalty.value,
+    isPaused: isPaused.value,
+    penalizedLocal: penalizedLocal.value,
+    penalizedVisit: penalizedVisit.value,
   });
+}
+
+async function pushRemoteState(showError = false) {
+  if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
+  syncControlsToStore();
+  try {
+    await publishMatchState(activeMatchId.value, scoreboardStore.state, {
+      ...publishOptions(),
+      isLive: true,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "No se pudo publicar el marcador";
+    console.error("[controls] publish", msg);
+    if (showError) message.error(msg);
+  }
 }
 
 function clearPendingPublish() {
@@ -370,22 +414,14 @@ const scheduleRemotePublish = () => {
   publishTimeout = window.setTimeout(() => {
     publishTimeout = null;
     if (advancingMatch.value) return;
-    syncClocksToStore();
-    void publishMatchState(activeMatchId.value, scoreboardStore.state, {
-      ...publishOptions(),
-      isLive: true,
-    });
+    void pushRemoteState();
   }, 120);
 };
 
 const flushRemotePublish = () => {
   if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
   clearPendingPublish();
-  syncClocksToStore();
-  void publishMatchState(activeMatchId.value, scoreboardStore.state, {
-    ...publishOptions(),
-    isLive: true,
-  });
+  void pushRemoteState(true);
 };
 
 async function loadTournamentContext() {
@@ -508,7 +544,7 @@ const togglePause = () => {
 };
 
 const changeGoalLocal = (value: number) => {
-  syncClocksToStore();
+  syncControlsToStore();
   const next = Math.max(0, scoreboardStore.state.goalLocal + value);
   scoreboardStore.updatePartial({ goalLocal: next });
   localGoals.value = String(next);
@@ -517,7 +553,7 @@ const changeGoalLocal = (value: number) => {
 };
 
 const changeGoalVisit = (value: number) => {
-  syncClocksToStore();
+  syncControlsToStore();
   const next = Math.max(0, scoreboardStore.state.goalVisit + value);
   scoreboardStore.updatePartial({ goalVisit: next });
   visitGoals.value = String(next);
@@ -723,7 +759,7 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
     notifyMatchChanged(matchId);
 
     if (remoteSyncEnabled) {
-      syncClocksToStore();
+      syncControlsToStore();
       await publishMatchState(matchId, scoreboardStore.state, {
         ...publishOptions(),
         organizerId: auth.userId,
@@ -892,18 +928,20 @@ onMounted(async () => {
   await loadTournamentContext();
 
   if (remoteSyncEnabled && activeMatchId.value) {
-    const remoteState = await fetchMatchState(activeMatchId.value);
-    if (!remoteState) {
-      scheduleRemotePublish();
-    } else if (
-      isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)
+    const remote = await fetchMatchState(activeMatchId.value);
+    if (
+      remote &&
+      isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)
     ) {
-      scoreboardStore.setState(normalizeScoreboardState(remoteState));
+      scoreboardStore.setState(normalizeScoreboardState(remote.state));
       syncUiFromLocalStorage();
       notifyScoreboardSync();
-    } else {
-      scheduleRemotePublish();
     }
+    await pushRemoteState(true);
+
+    remoteHeartbeat = window.setInterval(() => {
+      if (!advancingMatch.value) void pushRemoteState();
+    }, getPollIntervalMs());
   }
 
   controlsTicker = window.setInterval(() => {
@@ -924,6 +962,9 @@ onUnmounted(() => {
   }
   if (controlsTicker) {
     window.clearInterval(controlsTicker);
+  }
+  if (remoteHeartbeat) {
+    window.clearInterval(remoteHeartbeat);
   }
   window.removeEventListener("storage", syncWithStorage);
 });

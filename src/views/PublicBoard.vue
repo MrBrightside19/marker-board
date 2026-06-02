@@ -47,91 +47,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import { fetchMatchState, isRemoteSyncEnabled } from "../services/matchSync";
-import { DEFAULT_SCOREBOARD_STATE, type ScoreboardState } from "../types/scoreboard";
-import { getPollIntervalMs } from "../config/sync";
-import { getRunningClocks } from "../utils/scoreboardClock";
-import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
-import { parseTimeToMs } from "../utils/scoreboardClock";
+import { useRemoteHockeyBoard } from "../composables/useRemoteHockeyBoard";
 
-const pollIntervalMs = getPollIntervalMs();
-
-const route = useRoute();
-const snapshot = ref<ScoreboardState>({ ...DEFAULT_SCOREBOARD_STATE });
-const nowMs = ref(Date.now());
-const loadError = ref("");
-
-const matchId = computed(() => route.params.matchId?.toString() || "");
-const isRemoteConfigured = isRemoteSyncEnabled();
-
-const clocks = computed(() => getRunningClocks(snapshot.value, nowMs.value));
-const showTimeEndedAlert = ref(false);
-const prevTimeGame = ref("");
-
-const onGameTimeEnded = () => {
-  showTimeEndedAlert.value = true;
-};
-
-watch(
-  () => clocks.value.timeGame,
-  (time) => {
-    const previousMs = parseTimeToMs(prevTimeGame.value || time);
-    const nextMs = parseTimeToMs(time);
-
-    if (prevTimeGame.value) {
-      handleGameTimeTick(previousMs, nextMs, snapshot.value.isPaused);
-    }
-
-    if (time !== "00:00") {
-      showTimeEndedAlert.value = false;
-    }
-    prevTimeGame.value = time;
-  }
-);
-
-let tickInterval: number | null = null;
-let pollInterval: number | null = null;
-
-async function refreshFromServer() {
-  if (!matchId.value) return;
-
-  const remote = await fetchMatchState(matchId.value);
-  if (!remote) {
-    if (!snapshot.value.updatedAt) {
-      loadError.value = "No se encontro el partido en el servidor.";
-    }
-    return;
-  }
-
-  loadError.value = "";
-  snapshot.value = remote;
-  document.title = "Marcador en vivo";
-}
-
-onMounted(async () => {
-  if (!matchId.value || !isRemoteConfigured) return;
-
-  await refreshFromServer();
-  prevTimeGame.value = clocks.value.timeGame;
-
-  tickInterval = window.setInterval(() => {
-    nowMs.value = Date.now();
-  }, 1000);
-
-  window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
-
-  pollInterval = window.setInterval(() => {
-    void refreshFromServer();
-  }, pollIntervalMs);
-});
-
-onUnmounted(() => {
-  window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
-  if (tickInterval) window.clearInterval(tickInterval);
-  if (pollInterval) window.clearInterval(pollInterval);
-});
+const { matchId, snapshot, clocks, loadError, isRemoteConfigured, showTimeEndedAlert } =
+  useRemoteHockeyBoard({ documentTitle: "Marcador en vivo" });
 </script>
 
 <style scoped lang="scss">
