@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import type { Dayjs } from "dayjs";
@@ -129,14 +129,40 @@ function goToTournament(id: string) {
 }
 
 async function loadTournaments() {
-  if (!auth.userId) return;
+  const organizerId = auth.userId;
+  if (!organizerId) {
+    tournaments.value = [];
+    return;
+  }
+
   loading.value = true;
   try {
-    tournaments.value = await fetchTournamentsByOrganizer(auth.userId);
+    tournaments.value = await fetchTournamentsByOrganizer(organizerId);
   } finally {
     loading.value = false;
   }
 }
+
+async function bootstrapPage() {
+  await auth.init();
+
+  if (!auth.isOrganizer) {
+    loading.value = false;
+    message.info("Regístrate como organizador para crear torneos.");
+    router.replace("/");
+    return;
+  }
+
+  await loadTournaments();
+}
+
+watch(
+  () => auth.userId,
+  (userId, prevUserId) => {
+    if (!auth.initialized || !auth.isOrganizer || !userId || userId === prevUserId) return;
+    void loadTournaments();
+  }
+);
 
 async function createTournament() {
   if (!auth.userId) {
@@ -177,15 +203,9 @@ async function createTournament() {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   document.title = "Torneos";
-  await auth.init();
-  if (!auth.isOrganizer) {
-    message.info("Regístrate como organizador para crear torneos.");
-    router.replace("/");
-    return;
-  }
-  await loadTournaments();
+  void bootstrapPage();
 });
 </script>
 

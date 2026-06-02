@@ -21,6 +21,8 @@ function displayNameFromUser(user: User): string {
   return user.email?.split("@")[0] || "Usuario";
 }
 
+let initPromise: Promise<void> | null = null;
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     session: null as Session | null,
@@ -39,9 +41,18 @@ export const useAuthStore = defineStore("auth", {
   },
 
   actions: {
+    /** Espera a que la sesión inicial esté resuelta (compartido entre llamadas concurrentes). */
     async init() {
       if (this.initialized) return;
+      if (!initPromise) {
+        initPromise = this.bootstrapAuth().finally(() => {
+          initPromise = null;
+        });
+      }
+      await initPromise;
+    },
 
+    async bootstrapAuth() {
       const supabase = getSupabase();
       if (!supabase) {
         this.loading = false;
@@ -49,21 +60,51 @@ export const useAuthStore = defineStore("auth", {
         return;
       }
 
-      const { data } = await supabase.auth.getSession();
-      this.session = data.session;
-      if (this.session?.user) {
-        await this.syncProfile(this.session.user);
-      }
-
-      supabase.auth.onAuthStateChange(async (_event, session) => {
+      const applySession = async (session: Session | null) => {
         this.session = session;
         if (session?.user) {
           await this.syncProfile(session.user);
         } else {
           this.profile = null;
         }
-      });
+      };
 
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!this.initialized) {
+            if (event === "INITIAL_SESSION") {
+              await applySession(session);
+              finish();
+            }
+            return;
+          }
+
+          if (event === "SIGNED_OUT") {
+            await applySession(null);
+            return;
+          }
+
+          if (session?.user) {
+            await applySession(session);
+          }
+        });
+
+        void supabase.auth.getSession().then(async ({ data: sessionData }) => {
+          if (sessionData.session) {
+            await applySession(sessionData.session);
+            finish();
+          }
+        });
+
+        window.setTimeout(finish, 2500);
+      });
       this.loading = false;
       this.initialized = true;
     },

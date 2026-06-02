@@ -14,25 +14,24 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 
-// Handle GitHub Pages 404 redirect after app is mounted
-router.isReady().then(async () => {
+async function bootstrap() {
+  await router.isReady();
+
   const auth = useAuthStore();
   await auth.init();
+
+  app.mount('#app');
 
   const redirectPath = sessionStorage.getItem('404-redirect');
   if (redirectPath) {
     sessionStorage.removeItem('404-redirect');
-    // Small delay to ensure app is fully mounted
-    setTimeout(() => {
-      if (redirectPath !== '/') {
-        router.replace(redirectPath).catch(() => {
-          // If route doesn't exist, ignore the error
-          console.log('Route not found:', redirectPath);
-        });
-      }
-    }, 100);
+    if (redirectPath !== '/') {
+      router.replace(redirectPath).catch(() => {
+        console.log('Route not found:', redirectPath);
+      });
+    }
   }
-});
+}
 
-app.mount('#app')
+void bootstrap();
 
