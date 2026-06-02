@@ -46,6 +46,30 @@
       </div>
     </section>
 
+    <section v-if="broadcastCourts.length" class="share-panel broadcast-panel">
+      <h2>Transmisión (URL fija por cancha)</h2>
+      <p class="broadcast-intro">
+        Usa estas URLs en OBS o en la transmisión. No cambian entre partidos: al iniciar o
+        avanzar un encuentro en <strong>Controles</strong>, el marcador se actualiza solo vía
+        Supabase.
+      </p>
+      <div v-for="court in broadcastCourts" :key="court" class="broadcast-court-block">
+        <h3 class="broadcast-court-title">Cancha {{ formatCourtLabel(court) }}</h3>
+        <p class="broadcast-label">Overlay (recomendado para OBS)</p>
+        <div class="share-row">
+          <a-input :value="overlayUrlForCourt(court)" readonly />
+          <a-button type="primary" @click="copyBroadcastUrl(overlayUrlForCourt(court), 'Overlay')">
+            Copiar
+          </a-button>
+        </div>
+        <p class="broadcast-label">Live (pantalla completa)</p>
+        <div class="share-row">
+          <a-input :value="liveUrlForCourt(court)" readonly />
+          <a-button @click="copyBroadcastUrl(liveUrlForCourt(court), 'Live')">Copiar</a-button>
+        </div>
+      </div>
+    </section>
+
     <section class="import-panel">
       <h2>Carga masiva de partidos</h2>
       <p>
@@ -92,8 +116,9 @@
     <section class="matches-section">
       <h2>Partidos del torneo ({{ tournament.matches.length }})</h2>
       <p class="matches-hint">
-        Usa <strong>Marcador TV</strong> para abrir la pantalla de cancha; desde ahí abre
-        <strong>Controles</strong> en otra ventana.
+        Usa <strong>Marcador TV</strong> y <strong>Controles</strong> para operar cada partido.
+        Para la transmisión, configura el <strong>overlay fijo</strong> de tu cancha arriba (no
+        hace falta cambiarlo entre partidos).
       </p>
 
       <a-empty v-if="tournament.matches.length === 0" description="Importa partidos con el CSV" />
@@ -168,8 +193,13 @@ import { getTournamentTemplateUrl, parseTournamentCsv } from "../utils/tournamen
 import { getSportById } from "../types/sport";
 import { getTournamentPublicUrl, tournamentPublicRoute as tournamentPublicRouteUtil } from "../utils/routes";
 import { openHockeyOperatorSession } from "../utils/operatorWindows";
-import { setActiveMatchId, setActiveTournamentId } from "../utils/activeMatch";
-import { formatCourtLabel } from "../utils/court";
+import {
+  getTournamentLiveUrl,
+  getTournamentOverlayUrl,
+  setActiveMatchId,
+  setActiveTournamentId,
+} from "../utils/activeMatch";
+import { formatCourtLabel, normalizeCourt } from "../utils/court";
 
 const templateUrl = getTournamentTemplateUrl();
 
@@ -198,6 +228,32 @@ const sportLabel = computed(
 const publicTournamentUrl = computed(() =>
   tournament.value ? getTournamentPublicUrl(tournament.value.id) : ""
 );
+
+const broadcastCourts = computed(() => {
+  if (!tournament.value) return [];
+  const courts = new Set(
+    tournament.value.matches.map((m) => normalizeCourt(m.court))
+  );
+  return [...courts].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+});
+
+function liveUrlForCourt(court: string) {
+  return tournament.value ? getTournamentLiveUrl(tournament.value.id, court) : "";
+}
+
+function overlayUrlForCourt(court: string) {
+  return tournament.value ? getTournamentOverlayUrl(tournament.value.id, court) : "";
+}
+
+async function copyBroadcastUrl(url: string, label: string) {
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    message.success(`${label} copiado`);
+  } catch {
+    message.error("No se pudo copiar");
+  }
+}
 
 function tournamentPublicRoute(id: string) {
   return tournamentPublicRouteUtil(id);
@@ -444,6 +500,35 @@ onMounted(async () => {
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 24px;
+}
+
+.broadcast-intro {
+  margin: 0 0 16px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+}
+
+.broadcast-court-block {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #303030;
+}
+
+.broadcast-court-block:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.broadcast-court-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.broadcast-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .share-panel h2,

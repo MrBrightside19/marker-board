@@ -15,6 +15,7 @@ import { normalizeCourt } from "../utils/court";
 import { resolveSportId, type SportId } from "../types/sport";
 import { getSupabase } from "./supabaseClient";
 import { registerMatchRecord } from "./liveMatchesService";
+import { setTournamentCourtLiveMatch } from "./tournamentCourtStream";
 
 type TournamentRow = {
   id: string;
@@ -658,5 +659,21 @@ export async function startTournamentMatch(
     throw new Error(updateError.message);
   }
 
+  try {
+    await setTournamentCourtLiveMatch(matchRow.tournament_id, court, matchId);
+  } catch (error) {
+    console.error("[tournaments] court stream", error);
+  }
+
   return { matchId, tournamentId: matchRow.tournament_id, court };
+}
+
+/** Sincroniza la URL fija de transmisión si el operador ya tiene un partido en vivo en esa cancha. */
+export async function syncTournamentCourtStreamForMatch(
+  tournamentId: string,
+  court: string,
+  matchId: string
+): Promise<void> {
+  if (!matchId) return;
+  await setTournamentCourtLiveMatch(tournamentId, court, matchId);
 }

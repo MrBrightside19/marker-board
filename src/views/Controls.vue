@@ -13,9 +13,35 @@
             </span>
           </span>
           <span v-else><strong>Partido:</strong> {{ activeMatchId }}</span>
-          <a class="live-link" :href="publicUrl" target="_blank" rel="noopener">Live</a>
-          <a class="live-link" :href="overlayUrl" target="_blank" rel="noopener">Overlay</a>
+          <a
+            class="live-link"
+            :href="broadcastLiveUrl"
+            target="_blank"
+            rel="noopener"
+            :title="isTournamentMode ? 'URL fija de transmisión (no cambia entre partidos)' : ''"
+          >
+            {{ isTournamentMode ? "Live (transmisión)" : "Live" }}
+          </a>
+          <a
+            class="live-link"
+            :href="broadcastOverlayUrl"
+            target="_blank"
+            rel="noopener"
+            :title="isTournamentMode ? 'URL fija para OBS' : ''"
+          >
+            {{ isTournamentMode ? "Overlay (OBS)" : "Overlay" }}
+          </a>
           <a-button size="small" @click="copyOverlayUrl">Copiar overlay</a-button>
+          <a
+            v-if="isTournamentMode && perMatchLiveUrl"
+            class="live-link live-link--muted"
+            :href="perMatchLiveUrl"
+            target="_blank"
+            rel="noopener"
+            title="Enlace directo al partido actual"
+          >
+            Live partido
+          </a>
         </div>
         <a-button
           type="primary"
@@ -223,7 +249,10 @@ import {
   clearActiveTournamentSession,
   getPublicLiveUrl,
   getOverlayUrl,
+  getTournamentLiveUrl,
+  getTournamentOverlayUrl,
   resolveActiveMatchId,
+  setActiveCourt,
   setActiveMatchId,
   setActiveTournamentId,
 } from "../utils/activeMatch";
@@ -250,8 +279,10 @@ import {
   fetchTournamentControlsContext,
   finishTournamentMatch,
   startTournamentMatch,
+  syncTournamentCourtStreamForMatch,
   type TournamentControlsContext,
 } from "../services/tournamentService";
+import { withTimeout } from "../utils/async";
 
 const local = ref(localStorage.getItem("local-team") || "");
 const visit = ref(localStorage.getItem("visit-team") || "");
@@ -289,21 +320,36 @@ const remoteSyncEnabled = computed(() => isRemoteSyncEnabled());
 const activeTournamentId = ref<string | null>(null);
 const tournamentContext = ref<TournamentControlsContext | null>(null);
 const loadingTournament = ref(false);
+let loadingTournamentDepth = 0;
 const advancingMatch = ref(false);
 const startingMatchId = ref<string | null>(null);
 
-const publicUrl = computed(() =>
+const TOURNAMENT_OP_TIMEOUT_MS = 25_000;
+
+const perMatchLiveUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
 
-const overlayUrl = computed(() =>
+const perMatchOverlayUrl = computed(() =>
   activeMatchId.value ? getOverlayUrl(activeMatchId.value) : ""
 );
 
+const broadcastLiveUrl = computed(() => {
+  const ctx = tournamentContext.value;
+  if (ctx) return getTournamentLiveUrl(ctx.tournament.id, ctx.court);
+  return perMatchLiveUrl.value;
+});
+
+const broadcastOverlayUrl = computed(() => {
+  const ctx = tournamentContext.value;
+  if (ctx) return getTournamentOverlayUrl(ctx.tournament.id, ctx.court);
+  return perMatchOverlayUrl.value;
+});
+
 async function copyOverlayUrl() {
-  if (!overlayUrl.value) return;
+  if (!broadcastOverlayUrl.value) return;
   try {
-    await navigator.clipboard.writeText(overlayUrl.value);
+    await navigator.clipboard.writeText(broadcastOverlayUrl.value);
     message.success("URL del overlay copiada");
   } catch {
     message.error("No se pudo copiar la URL");
@@ -445,20 +491,30 @@ async function loadTournamentContext() {
     return;
   }
 
+  loadingTournamentDepth += 1;
   loadingTournament.value = true;
   try {
-    const ctx = await fetchTournamentControlsContext(activeMatchId.value);
+    const ctx = await withTimeout(
+      fetchTournamentControlsContext(activeMatchId.value),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo cargar el torneo (tiempo de espera agotado)"
+    );
     if (ctx) {
       activeTournamentId.value = ctx.tournament.id;
       setActiveTournamentId(ctx.tournament.id);
+      setActiveCourt(ctx.court);
       tournamentContext.value = ctx;
     } else {
       activeTournamentId.value = null;
       clearActiveTournamentSession();
       tournamentContext.value = null;
     }
+  } catch (error) {
+    console.error("[controls] tournament context", error);
+    message.error(error instanceof Error ? error.message : "Error al cargar el torneo");
   } finally {
-    loadingTournament.value = false;
+    loadingTournamentDepth = Math.max(0, loadingTournamentDepth - 1);
+    loadingTournament.value = loadingTournamentDepth > 0;
   }
 }
 
@@ -714,15 +770,34 @@ async function finishCurrentTournamentMatchIfNeeded() {
   await finishTournamentMatch(current.id, finishedState);
 
   if (remoteSyncEnabled.value) {
-    await publishMatchState(finishedMatchId, finishedState, {
-      organizerId: auth.userId,
-      title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
-      tournamentId:
-        tournamentContext.value?.tournament.id ?? activeTournamentId.value ?? undefined,
-      isLive: false,
+    void withTimeout(
+      publishMatchState(finishedMatchId, finishedState, {
+        organizerId: auth.userId,
+        title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
+        tournamentId:
+          tournamentContext.value?.tournament.id ?? activeTournamentId.value ?? undefined,
+        isLive: false,
+      }),
+      TOURNAMENT_OP_TIMEOUT_MS
+    ).catch((error) => {
+      console.error("[controls] finish publish", error);
     });
   } else {
-    await setMatchLiveStatus(finishedMatchId, false);
+    void setMatchLiveStatus(finishedMatchId, false);
+  }
+}
+
+async function ensureTournamentCourtStream() {
+  const ctx = tournamentContext.value;
+  if (!ctx || !activeMatchId.value || !remoteSyncEnabled.value) return;
+  try {
+    await syncTournamentCourtStreamForMatch(
+      ctx.tournament.id,
+      ctx.court,
+      activeMatchId.value
+    );
+  } catch (error) {
+    console.error("[controls] court stream", error);
   }
 }
 
@@ -734,6 +809,7 @@ function applyTournamentMatchToControls(scheduled: TournamentMatch, matchId: str
   });
 
   setActiveMatchId(matchId);
+  setActiveCourt(scheduled.court);
   activeMatchId.value = matchId;
   scoreboardStore.setState(freshState);
   penalizedLocal.value = false;
@@ -749,35 +825,63 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
   }
   if (advancingMatch.value) return;
 
+  if (!tournamentContext.value) {
+    await loadTournamentContext();
+  }
+
   startingMatchId.value = scheduled.id;
   clearPendingPublish();
   advancingMatch.value = true;
   try {
-    await loadTournamentContext();
-    await finishCurrentTournamentMatchIfNeeded();
+    await withTimeout(
+      finishCurrentTournamentMatchIfNeeded(),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo finalizar el partido anterior"
+    );
 
     activeTournamentId.value = scheduled.tournamentId;
     setActiveTournamentId(scheduled.tournamentId);
 
-    const { matchId } = await startTournamentMatch(scheduled.id, auth.userId);
-    applyTournamentMatchToControls(scheduled, matchId);
+    const { matchId, tournamentId, court } = await withTimeout(
+      startTournamentMatch(scheduled.id, auth.userId),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo iniciar el partido en el servidor"
+    );
 
-    await router.replace({ path: "/controls", query: { matchId } });
+    applyTournamentMatchToControls(scheduled, matchId);
+    syncControlsToStore();
+
+    void router.replace({ path: "/controls", query: { matchId } });
     notifyScoreboardSync();
     notifyMatchChanged(matchId);
 
     if (remoteSyncEnabled.value) {
-      syncControlsToStore();
-      await publishMatchState(matchId, scoreboardStore.state, {
-        ...publishOptions(),
-        organizerId: auth.userId,
-        isLive: true,
+      void withTimeout(
+        syncTournamentCourtStreamForMatch(tournamentId, court, matchId),
+        TOURNAMENT_OP_TIMEOUT_MS
+      ).catch((error) => {
+        console.error("[controls] court stream", error);
+        message.warning(
+          "Partido iniciado, pero la URL fija de transmisión no se actualizó. Revisa tournament_court_streams en Supabase."
+        );
+      });
+
+      void withTimeout(
+        publishMatchState(matchId, scoreboardStore.state, {
+          ...publishOptions(),
+          organizerId: auth.userId,
+          isLive: true,
+        }),
+        TOURNAMENT_OP_TIMEOUT_MS
+      ).catch((error) => {
+        console.error("[controls] publish new match", error);
       });
     }
 
-    await loadTournamentContext();
+    void loadTournamentContext();
+
     message.success(
-      `${scheduled.localTeam} vs ${scheduled.visitTeam}. Nueva URL live: ${getPublicLiveUrl(matchId)}`
+      `${scheduled.localTeam} vs ${scheduled.visitTeam}. Overlay y live de transmisión siguen con la misma URL.`
     );
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo cargar el partido");
@@ -810,7 +914,7 @@ async function startNextTournamentMatch() {
   const confirmed = window.confirm(
     `¿Pasar al siguiente partido?\n\n` +
       `${next.localTeam} vs ${next.visitTeam} (${next.timeGame})\n\n` +
-      "Se reinician goles, periodo y relojes. Habra una nueva URL de live para espectadores."
+      "Se reinician goles, periodo y relojes. La URL de transmisión (overlay/OBS) se mantiene."
   );
   if (!confirmed) return;
 
@@ -933,6 +1037,7 @@ onMounted(async () => {
 
   await auth.init();
   await loadTournamentContext();
+  await ensureTournamentCourtStream();
 
   if (remoteSyncEnabled.value && activeMatchId.value) {
     try {
@@ -1050,6 +1155,11 @@ watch(visit, updateVisitlTeam);
 
 .live-link {
   color: #1677ff;
+}
+
+.live-link--muted {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
 }
 
 .controls-row {

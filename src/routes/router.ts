@@ -10,6 +10,8 @@ import BasketballScoreBoard from "../components/basketball/BasketballScoreBoard.
 import BasketballControls from "../views/BasketballControls.vue";
 import BasketballPublicBoard from "../views/BasketballPublicBoard.vue";
 import Overlay from "../views/Overlay.vue";
+import TournamentCourtLive from "../views/TournamentCourtLive.vue";
+import TournamentCourtOverlay from "../views/TournamentCourtOverlay.vue";
 
 const routes = [
   { path: "/", name: "home", component: Home },
@@ -18,7 +20,17 @@ const routes = [
   { path: "/torneo/:id", name: "tournament-public", component: PublicTournament },
   { path: "/board", name: "board", component: ScoreBoard },
   { path: "/controls", name: "controls", component: Controls },
+  {
+    path: "/live/torneo/:tournamentId/:court",
+    name: "tournament-live",
+    component: TournamentCourtLive,
+  },
   { path: "/live/:matchId", name: "live", component: PublicBoard },
+  {
+    path: "/overlay/torneo/:tournamentId/:court",
+    name: "tournament-overlay",
+    component: TournamentCourtOverlay,
+  },
   { path: "/overlay/:matchId", name: "overlay", component: Overlay },
   { path: "/basquet/board", name: "basketball-board", component: BasketballScoreBoard },
   { path: "/basquet/controls", name: "basketball-controls", component: BasketballControls },

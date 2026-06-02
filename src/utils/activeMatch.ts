@@ -1,3 +1,5 @@
+import { normalizeCourt } from "./court";
+
 export const ACTIVE_MATCH_STORAGE_KEY = "active-match-id";
 export const ACTIVE_TOURNAMENT_STORAGE_KEY = "active-tournament-id";
 export const ACTIVE_COURT_STORAGE_KEY = "active-court";
@@ -73,10 +75,20 @@ export function getBasketballPublicLiveUrl(matchId: string): string {
   return buildAppUrl(`/basquet/live/${matchId}`);
 }
 
-/** Live publico fijo por cancha del torneo. */
+/** Live público fijo por cancha del torneo (misma URL para todos los partidos de esa cancha). */
 export function getTournamentLiveUrl(tournamentId: string, court = "1"): string {
-  const courtSlug = court.trim() || "1";
-  return buildAppUrl(`/live/torneo/${tournamentId}/${encodeURIComponent(courtSlug)}`);
+  const courtSlug = normalizeCourt(court);
+  return buildAppUrl(
+    `/live/torneo/${encodeURIComponent(tournamentId)}/${encodeURIComponent(courtSlug)}`
+  );
+}
+
+/** Overlay fijo por cancha del torneo (OBS: configurar una sola vez). */
+export function getTournamentOverlayUrl(tournamentId: string, court = "1"): string {
+  const courtSlug = normalizeCourt(court);
+  return buildAppUrl(
+    `/overlay/torneo/${encodeURIComponent(tournamentId)}/${encodeURIComponent(courtSlug)}`
+  );
 }
 
 export function getActiveCourt(): string | null {
