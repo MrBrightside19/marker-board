@@ -5,6 +5,7 @@ import Controls from "../views/Controls.vue";
 import PublicBoard from "../views/PublicBoard.vue";
 import PublicTournament from "../views/PublicTournament.vue";
 import Tournaments from "../views/Tournaments.vue";
+import PublicTournaments from "../views/PublicTournaments.vue";
 import TournamentDetail from "../views/TournamentDetail.vue";
 import BasketballScoreBoard from "../components/basketball/BasketballScoreBoard.vue";
 import BasketballControls from "../views/BasketballControls.vue";
@@ -16,6 +17,7 @@ import TournamentCourtOverlay from "../views/TournamentCourtOverlay.vue";
 const routes = [
   { path: "/", name: "home", component: Home },
   { path: "/tournaments", name: "tournaments", component: Tournaments },
+  { path: "/torneos-publicos", name: "public-tournaments", component: PublicTournaments },
   { path: "/tournaments/:id", name: "tournament-detail", component: TournamentDetail },
   { path: "/torneo/:id", name: "tournament-public", component: PublicTournament },
   { path: "/board", name: "board", component: ScoreBoard },

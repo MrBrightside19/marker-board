@@ -11,8 +11,8 @@ export interface SportDefinition {
 export const SPORTS: SportDefinition[] = [
   {
     id: "hockey",
-    name: "Hockey",
-    description: "Marcador con periodos y cronómetro",
+    name: "Hockey Inline",
+    description: "Hockey sobre patines en línea — periodos y cronómetro",
     available: true,
   },
   {

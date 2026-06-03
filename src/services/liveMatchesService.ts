@@ -11,7 +11,8 @@ import { isSupabaseRestConfigured, restUpsertMatch } from "./supabaseRest";
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 
 export type LiveMatchesFilters = {
-  sportId: SportId;
+  /** Sin valor = todos los deportes con marcador disponible. */
+  sportId?: SportId | null;
   publicTournamentsOnly?: boolean;
 };
 
@@ -106,6 +107,7 @@ function matchVisibleOnHome(
 
   const tournamentId = row.tournament_id;
   if (!tournamentId) {
+    if (!filters.sportId) return true;
     if (isBasketballScoreboardState(row.state)) {
       return filters.sportId === "basquet";
     }
@@ -119,6 +121,7 @@ function matchVisibleOnHome(
     return false;
   }
 
+  if (!filters.sportId) return true;
   return meta.sport === filters.sportId;
 }
 

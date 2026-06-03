@@ -31,7 +31,7 @@ type TournamentRow = {
 };
 
 export type PublicHomeFilters = {
-  sportId: SportId;
+  sportId?: SportId;
 };
 
 type TournamentMatchRow = {
