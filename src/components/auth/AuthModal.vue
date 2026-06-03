@@ -165,6 +165,10 @@ async function submit() {
   try {
     if (mode.value === "login") {
       await auth.signIn(trimmedEmail, password.value);
+      if (!auth.isAuthenticated) {
+        errorMessage.value = "No se pudo establecer la sesión. Intenta de nuevo.";
+        return;
+      }
       open.value = false;
       emit("success");
       return;

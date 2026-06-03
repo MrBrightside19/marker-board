@@ -1,5 +1,6 @@
 <template>
   <div class="basketball-controls">
+    <OperatorCloseGuardBanner :needs-arm-click="needsArmClick" :arm-now="armNow" />
     <section class="controls-panel">
       <div class="controls-toolbar">
         <div v-if="activeMatchId && remoteSyncEnabled" class="match-info">
@@ -116,6 +117,8 @@ import {
   resolveActiveMatchId,
   setActiveMatchId,
 } from "../utils/activeMatch";
+import OperatorCloseGuardBanner from "../components/OperatorCloseGuardBanner.vue";
+import { useOperatorCloseGuard } from "../composables/useOperatorCloseGuard";
 import {
   claimBasketballControlsWriter,
   isBasketballRemoteStateNewer,
@@ -149,6 +152,8 @@ const showTimeEndedAlert = ref(false);
 
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
+
+const { needsArmClick, armNow } = useOperatorCloseGuard();
 
 const publicUrl = computed(() =>
   activeMatchId.value ? getBasketballPublicLiveUrl(activeMatchId.value) : ""

@@ -1,23 +1,7 @@
 <template>
 
   <div class="scoreboard-container font-digital">
-    <div class="session-bar">
-      <router-link to="/" class="session-link">Inicio</router-link>
-      <template v-if="activeMatchId && remoteSyncEnabled">
-        <span class="session-label">Partido: {{ activeMatchId }}</span>
-        <a class="session-link" :href="publicUrl" target="_blank" rel="noopener">Live público</a>
-      </template>
-    </div>
-
-    <a-button
-      @click="openControlsInNewTab"
-      type="primary"
-      size="large"
-      class="controls-button"
-    >
-      Controles
-    </a-button>
-
+    <OperatorCloseGuardBanner :needs-arm-click="needsArmClick" :arm-now="armNow" />
     <div class="scoreboard-stage">
       <div class="scoreboard-content">
         <div class="team-score local-team">
@@ -71,10 +55,11 @@ import {
 import { getPollIntervalMs } from "../config/sync";
 import {
   ACTIVE_MATCH_STORAGE_KEY,
-  getPublicLiveUrl,
   resolveActiveMatchId,
   setActiveMatchId,
 } from "../utils/activeMatch";
+import OperatorCloseGuardBanner from "./OperatorCloseGuardBanner.vue";
+import { useOperatorCloseGuard } from "../composables/useOperatorCloseGuard";
 import {
   isControlsActiveWriter,
   isRemoteStateNewer,
@@ -91,27 +76,13 @@ const route = useRoute();
 const scoreboardStore = useScoreboardStore();
 const activeMatchId = ref("");
 const remoteSyncEnabled = isRemoteSyncEnabled();
-const publicUrl = computed(() =>
-  activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
-);
+const { needsArmClick, armNow } = useOperatorCloseGuard();
+
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;
 const nowMs = ref(Date.now());
 
 const pollIntervalMs = getPollIntervalMs();
-
-const openControlsInNewTab = () => {
-  const routeLocation = router.resolve({
-    path: "/controls",
-    query: activeMatchId.value ? { matchId: activeMatchId.value } : {},
-  });
-  const width = 800;
-  const height = 600;
-  const left = (window.screen.width - width) / 2;
-  const top = (window.screen.height - height) / 2;
-  const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
-  window.open(routeLocation.href, "controlsWindow", features);
-};
 
 /** Sincronización desde Controles (misma PC): goles/equipos sin recalcular reloj. */
 const syncFromControlsWriter = () => {
@@ -304,20 +275,21 @@ onMounted(async () => {
   syncLocalRefsFromStorage();
 
   if (remoteSyncEnabled && activeMatchId.value) {
-    const remoteState = await fetchMatchState(activeMatchId.value);
-    if (remoteState && isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)) {
-      scoreboardStore.setState(remoteState);
-      onScoreboardSync();
-    }
-
     pollInterval = window.setInterval(async () => {
       if (isControlsActiveWriter() || !activeMatchId.value) return;
       const remote = await fetchMatchState(activeMatchId.value);
-      if (remote && isRemoteStateNewer(remote, scoreboardStore.state.updatedAt)) {
-        scoreboardStore.setState(remote);
+      if (remote && isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)) {
+        scoreboardStore.setState(remote.state);
         onScoreboardSync();
       }
     }, pollIntervalMs);
+
+    void fetchMatchState(activeMatchId.value).then((remote) => {
+      if (remote && isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)) {
+        scoreboardStore.setState(remote.state);
+        onScoreboardSync();
+      }
+    });
   }
 
   window.addEventListener("storage", updateGoalLocal);
@@ -395,36 +367,8 @@ watch(penaltyMilliseconds, (newVal) => {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #000;
-  color: #fff;
-}
-
-.session-bar {
-  position: absolute;
-  top: clamp(8px, 2vh, 20px);
-  left: clamp(8px, 2vh, 20px);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: clamp(12px, 1.4vw, 18px);
-  max-width: min(50vw, 520px);
-}
-
-.session-label {
-  opacity: 0.85;
-}
-
-.session-link {
-  color: #69b1ff;
-  word-break: break-all;
-}
-
-.controls-button {
-  position: absolute;
-  top: clamp(8px, 2vh, 20px);
-  right: clamp(8px, 2vh, 20px);
-  z-index: 1000;
+  background: var(--scoreboard-bg, #000);
+  color: var(--scoreboard-fg, #fff);
 }
 
 .scoreboard-stage {

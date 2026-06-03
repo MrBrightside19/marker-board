@@ -1,23 +1,30 @@
 <template>
   <div class="public-board font-digital">
     <LiveSyncStatus
-      :match-id="matchId"
+      :match-id="matchId || tournamentId"
       :is-remote-configured="isRemoteConfigured"
-      :is-polling="isPolling"
-      :fetch-count="fetchCount"
+      :is-polling="isPolling || isPollingStream"
+      :fetch-count="fetchCount + streamFetchCount"
       :poll-interval-ms="pollIntervalMs"
       :last-sync-at="lastSyncAt"
     />
-    <div v-if="!matchId" class="status-message">
-      Debes abrir esta vista con un enlace de live valido (/live/:matchId).
+    <div v-if="!tournamentId" class="status-message">
+      Enlace inválido. Usa <code>/live/torneo/:torneoId/:cancha</code>.
     </div>
     <div v-else-if="!isRemoteConfigured" class="status-message">
-      Sincronizacion remota no configurada. Define VITE_SUPABASE_URL y
-      VITE_SUPABASE_ANON_KEY.
+      Sincronización remota no configurada. Define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
+    </div>
+    <div v-else-if="streamError" class="status-message">{{ streamError }}</div>
+    <div v-else-if="waitingForMatch" class="status-message">
+      <p>Transmisión — {{ courtLabel }}</p>
+      <p class="status-sub">Esperando el siguiente partido en esta cancha…</p>
     </div>
     <div v-else class="board-content">
       <p v-if="loadError" class="sync-warning">{{ loadError }}</p>
-      <p v-else-if="!isPolling && isRemoteConfigured" class="sync-warning">
+      <p
+        v-else-if="!isPolling && !isPollingStream && isRemoteConfigured"
+        class="sync-warning"
+      >
         Iniciando sincronización…
       </p>
       <div class="team-panel left">
@@ -59,28 +66,34 @@
 
 <script setup lang="ts">
 import LiveSyncStatus from "../components/LiveSyncStatus.vue";
-import { useRemoteHockeyBoard } from "../composables/useRemoteHockeyBoard";
+import { useTournamentCourtBoard } from "../composables/useTournamentCourtBoard";
 
 const {
+  tournamentId,
+  courtLabel,
   matchId,
   snapshot,
   clocks,
   loadError,
+  streamError,
+  waitingForMatch,
   isRemoteConfigured,
   isPolling,
+  isPollingStream,
   lastSyncAt,
   fetchCount,
+  streamFetchCount,
   pollIntervalMs,
   showTimeEndedAlert,
-} = useRemoteHockeyBoard({ documentTitle: "Marcador en vivo" });
+} = useTournamentCourtBoard({ documentTitle: "Marcador en vivo — torneo" });
 </script>
 
 <style scoped lang="scss">
 .public-board {
   width: 100vw;
   height: 100vh;
-  background: var(--scoreboard-bg, #000);
-  color: var(--scoreboard-fg, #fff);
+  background: #000;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,6 +103,12 @@ const {
   font-size: clamp(18px, 2.4vw, 36px);
   padding: 20px;
   text-align: center;
+}
+
+.status-sub {
+  margin-top: 12px;
+  font-size: clamp(14px, 1.8vw, 24px);
+  opacity: 0.75;
 }
 
 .sync-warning {

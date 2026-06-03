@@ -3,10 +3,12 @@
     <header class="page-header">
       <div>
         <h1>Mis torneos</h1>
-        <p v-if="auth.isOrganizer">Crea torneos, carga el calendario y opera cada partido.</p>
+        <p v-if="auth.isOrganizer">
+          Crea torneos, carga el calendario por deporte y opera cada partido.
+        </p>
         <p v-else>Solo los organizadores pueden crear torneos.</p>
       </div>
-      <a-button v-if="auth.isOrganizer" type="primary" size="large" @click="showCreate = true">
+      <a-button v-if="auth.isOrganizer" type="primary" size="large" @click="openCreateModal">
         Nuevo torneo
       </a-button>
     </header>
@@ -37,22 +39,20 @@
       ok-text="Crear torneo"
       cancel-text="Cancelar"
       :confirm-loading="creating"
-      @ok="createTournament"
+      width="520px"
+      destroy-on-close
+      @ok="onCreateModalOk"
     >
       <a-form layout="vertical">
+        <a-form-item label="Deporte del torneo" required>
+          <SportPicker
+            v-model="form.sport"
+            required
+            hint="Define qué marcador y plantilla CSV usarás en este torneo."
+          />
+        </a-form-item>
         <a-form-item label="Nombre del torneo" required>
           <a-input v-model:value="form.name" placeholder="Ej. Liga Verano 2026" />
-        </a-form-item>
-        <a-form-item label="Deporte" required>
-          <a-select v-model:value="form.sport" style="width: 100%">
-            <a-select-option
-              v-for="sport in availableSports"
-              :key="sport.id"
-              :value="sport.id"
-            >
-              {{ sport.name }}
-            </a-select-option>
-          </a-select>
         </a-form-item>
         <a-form-item label="Visibilidad" required>
           <a-radio-group v-model:value="form.visibility">
@@ -65,10 +65,28 @@
           </p>
         </a-form-item>
         <a-form-item label="Fecha inicio" required>
-          <a-date-picker v-model:value="form.startDate" style="width: 100%" />
+          <a-date-picker
+            :value="form.startDate"
+            style="width: 100%"
+            format="DD/MM/YYYY"
+            placeholder="Selecciona fecha"
+            allow-clear
+            input-read-only
+            :get-popup-container="popupContainer"
+            @update:value="onStartDateChange"
+          />
         </a-form-item>
         <a-form-item label="Fecha fin" required>
-          <a-date-picker v-model:value="form.endDate" style="width: 100%" />
+          <a-date-picker
+            :value="form.endDate"
+            style="width: 100%"
+            format="DD/MM/YYYY"
+            placeholder="Selecciona fecha"
+            allow-clear
+            input-read-only
+            :get-popup-container="popupContainer"
+            @update:value="onEndDateChange"
+          />
         </a-form-item>
         <p class="form-hint">
           Los tiempos de cada partido se definen en la
@@ -80,16 +98,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useAuthStore } from "../stores/auth";
 import type { Tournament, TournamentVisibility } from "../types/tournament";
-import { DEFAULT_SPORT_ID, SPORTS, getSportById, type SportId } from "../types/sport";
+import { getSportById, type SportId } from "../types/sport";
 import { createTournament as createTournamentApi, fetchTournamentsByOrganizer } from "../services/tournamentService";
 import { getTournamentTemplateUrl } from "../utils/tournamentCsv";
+import SportPicker from "../components/sport/SportPicker.vue";
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -100,17 +119,15 @@ const loading = ref(true);
 const showCreate = ref(false);
 const creating = ref(false);
 
-const availableSports = computed(() => SPORTS.filter((sport) => sport.available));
-
 const form = ref<{
   name: string;
-  sport: SportId;
+  sport: SportId | null;
   visibility: TournamentVisibility;
   startDate: Dayjs | null;
   endDate: Dayjs | null;
 }>({
   name: "",
-  sport: DEFAULT_SPORT_ID,
+  sport: null,
   visibility: "private",
   startDate: dayjs(),
   endDate: dayjs().add(7, "day"),
@@ -128,32 +145,107 @@ function goToTournament(id: string) {
   router.push({ name: "tournament-detail", params: { id } });
 }
 
+function popupContainer(trigger: HTMLElement) {
+  return trigger.parentElement ?? document.body;
+}
+
+/** Evita valores inválidos del picker al borrar texto (causaban cuelgue de la UI). */
+function coercePickerDate(value: unknown): Dayjs | null {
+  if (value == null || value === "") return null;
+  if (dayjs.isDayjs(value)) {
+    return value.isValid() ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = dayjs(trimmed, ["DD/MM/YYYY", "YYYY-MM-DD"], true);
+    return parsed.isValid() ? parsed : null;
+  }
+  return null;
+}
+
+function onStartDateChange(value: unknown) {
+  form.value.startDate = coercePickerDate(value);
+}
+
+function onEndDateChange(value: unknown) {
+  form.value.endDate = coercePickerDate(value);
+}
+
+function openCreateModal() {
+  form.value = {
+    name: "",
+    sport: null,
+    visibility: "private",
+    startDate: dayjs().startOf("day"),
+    endDate: dayjs().add(7, "day").startOf("day"),
+  };
+  showCreate.value = true;
+}
+
+function onCreateModalOk() {
+  return createTournament();
+}
+
 async function loadTournaments() {
-  if (!auth.userId) return;
+  const organizerId = auth.userId;
+  if (!organizerId) {
+    tournaments.value = [];
+    return;
+  }
+
   loading.value = true;
   try {
-    tournaments.value = await fetchTournamentsByOrganizer(auth.userId);
+    tournaments.value = await fetchTournamentsByOrganizer(organizerId);
   } finally {
     loading.value = false;
   }
 }
 
-async function createTournament() {
+async function bootstrapPage() {
+  await auth.init();
+
+  if (!auth.isOrganizer) {
+    loading.value = false;
+    message.info("Regístrate como organizador para crear torneos.");
+    router.replace("/");
+    return;
+  }
+
+  await loadTournaments();
+}
+
+watch(
+  () => auth.userId,
+  (userId, prevUserId) => {
+    if (!auth.initialized || !auth.isOrganizer || !userId || userId === prevUserId) return;
+    void loadTournaments();
+  }
+);
+
+async function createTournament(): Promise<void> {
   if (!auth.userId) {
     message.warning("Inicia sesión como organizador.");
-    return;
+    return Promise.reject();
+  }
+  if (!form.value.sport) {
+    message.error("Selecciona el deporte del torneo.");
+    return Promise.reject();
   }
   if (!form.value.name.trim()) {
     message.error("Indica el nombre del torneo.");
-    return;
+    return Promise.reject();
   }
-  if (!form.value.startDate || !form.value.endDate) {
+
+  const start = form.value.startDate;
+  const end = form.value.endDate;
+  if (!start?.isValid() || !end?.isValid()) {
     message.error("Indica las fechas del torneo.");
-    return;
+    return Promise.reject();
   }
-  if (form.value.endDate.isBefore(form.value.startDate, "day")) {
+  if (end.isBefore(start, "day")) {
     message.error("La fecha fin debe ser posterior a la de inicio.");
-    return;
+    return Promise.reject();
   }
 
   creating.value = true;
@@ -163,8 +255,8 @@ async function createTournament() {
       name: form.value.name.trim(),
       sport: form.value.sport,
       visibility: form.value.visibility,
-      startDate: form.value.startDate.format("YYYY-MM-DD"),
-      endDate: form.value.endDate.format("YYYY-MM-DD"),
+      startDate: start.format("YYYY-MM-DD"),
+      endDate: end.format("YYYY-MM-DD"),
     });
     message.success("Torneo creado");
     showCreate.value = false;
@@ -172,20 +264,15 @@ async function createTournament() {
     goToTournament(created.id);
   } catch (error) {
     message.error(error instanceof Error ? error.message : "Error al crear torneo");
+    return Promise.reject();
   } finally {
     creating.value = false;
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   document.title = "Torneos";
-  await auth.init();
-  if (!auth.isOrganizer) {
-    message.info("Regístrate como organizador para crear torneos.");
-    router.replace("/");
-    return;
-  }
-  await loadTournaments();
+  void bootstrapPage();
 });
 </script>
 
@@ -252,4 +339,5 @@ onMounted(async () => {
   margin-top: 8px;
   color: rgba(0, 0, 0, 0.45);
 }
+
 </style>

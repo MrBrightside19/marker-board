@@ -1,5 +1,6 @@
 <template>
   <div class="controls-page" :class="{ 'has-tournament': isTournamentMode }">
+    <OperatorCloseGuardBanner :needs-arm-click="needsArmClick" :arm-now="armNow" />
     <section class="controls-panel">
       <div class="controls-toolbar">
         <div v-if="activeMatchId && remoteSyncEnabled" class="match-panel-info">
@@ -12,7 +13,35 @@
             </span>
           </span>
           <span v-else><strong>Partido:</strong> {{ activeMatchId }}</span>
-          <a class="live-link" :href="publicUrl" target="_blank" rel="noopener">Live</a>
+          <a
+            class="live-link"
+            :href="broadcastLiveUrl"
+            target="_blank"
+            rel="noopener"
+            :title="isTournamentMode ? 'URL fija de transmisión (no cambia entre partidos)' : ''"
+          >
+            {{ isTournamentMode ? "Live (transmisión)" : "Live" }}
+          </a>
+          <a
+            class="live-link"
+            :href="broadcastOverlayUrl"
+            target="_blank"
+            rel="noopener"
+            :title="isTournamentMode ? 'URL fija para OBS' : ''"
+          >
+            {{ isTournamentMode ? "Overlay (OBS)" : "Overlay" }}
+          </a>
+          <a-button size="small" @click="copyOverlayUrl">Copiar overlay</a-button>
+          <a
+            v-if="isTournamentMode && perMatchLiveUrl"
+            class="live-link live-link--muted"
+            :href="perMatchLiveUrl"
+            target="_blank"
+            rel="noopener"
+            title="Enlace directo al partido actual"
+          >
+            Live partido
+          </a>
         </div>
         <a-button
           type="primary"
@@ -208,6 +237,7 @@ import {
   normalizeScoreboardState,
   useScoreboardStore,
 } from "../stores/scoreboard";
+import { getPollIntervalMs } from "../config/sync";
 import {
   fetchMatchState,
   isRemoteSyncEnabled,
@@ -216,10 +246,13 @@ import {
 import { setMatchLiveStatus } from "../services/liveMatchesService";
 import {
   createMatchId,
-  getActiveCourt,
-  getActiveTournamentId,
+  clearActiveTournamentSession,
   getPublicLiveUrl,
+  getOverlayUrl,
+  getTournamentLiveUrl,
+  getTournamentOverlayUrl,
   resolveActiveMatchId,
+  setActiveCourt,
   setActiveMatchId,
   setActiveTournamentId,
 } from "../utils/activeMatch";
@@ -230,6 +263,8 @@ import {
   resetGameTimeAlertCooldown,
 } from "../utils/gameTimeAlert";
 import { formatTime, parseTimeToMs } from "../utils/scoreboardClock";
+import OperatorCloseGuardBanner from "../components/OperatorCloseGuardBanner.vue";
+import { useOperatorCloseGuard } from "../composables/useOperatorCloseGuard";
 import {
   claimControlsWriter,
   isRemoteStateNewer,
@@ -239,14 +274,22 @@ import {
   touchControlsWriterHeartbeat,
 } from "../utils/scoreboardSync";
 import { useAuthStore } from "../stores/auth";
+import { useUserPreferencesStore } from "../stores/userPreferences";
+import {
+  findControlActionForKey,
+  isTypingTarget,
+} from "../utils/controlShortcuts";
+import type { ControlShortcutAction } from "../types/userPreferences";
 import type { TournamentMatch } from "../types/tournament";
 import {
   fetchTournamentControlsContext,
-  fetchTournamentControlsContextByTournamentId,
+  markTournamentMatchLive,
   finishTournamentMatch,
   startTournamentMatch,
+  syncTournamentCourtStreamForMatch,
   type TournamentControlsContext,
 } from "../services/tournamentService";
+import { withTimeout } from "../utils/async";
 
 const local = ref(localStorage.getItem("local-team") || "");
 const visit = ref(localStorage.getItem("visit-team") || "");
@@ -280,18 +323,47 @@ const router = useRouter();
 const scoreboardStore = useScoreboardStore();
 const auth = useAuthStore();
 const activeMatchId = ref("");
-const remoteSyncEnabled = isRemoteSyncEnabled();
-const activeTournamentId = ref<string | null>(getActiveTournamentId());
+const remoteSyncEnabled = computed(() => isRemoteSyncEnabled());
+const activeTournamentId = ref<string | null>(null);
 const tournamentContext = ref<TournamentControlsContext | null>(null);
 const loadingTournament = ref(false);
+let loadingTournamentDepth = 0;
 const advancingMatch = ref(false);
 const startingMatchId = ref<string | null>(null);
 
-const publicUrl = computed(() =>
+const TOURNAMENT_OP_TIMEOUT_MS = 25_000;
+
+const perMatchLiveUrl = computed(() =>
   activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
 );
 
-const isTournamentMode = computed(() => Boolean(activeTournamentId.value));
+const perMatchOverlayUrl = computed(() =>
+  activeMatchId.value ? getOverlayUrl(activeMatchId.value) : ""
+);
+
+const broadcastLiveUrl = computed(() => {
+  const ctx = tournamentContext.value;
+  if (ctx) return getTournamentLiveUrl(ctx.tournament.id, ctx.court);
+  return perMatchLiveUrl.value;
+});
+
+const broadcastOverlayUrl = computed(() => {
+  const ctx = tournamentContext.value;
+  if (ctx) return getTournamentOverlayUrl(ctx.tournament.id, ctx.court);
+  return perMatchOverlayUrl.value;
+});
+
+async function copyOverlayUrl() {
+  if (!broadcastOverlayUrl.value) return;
+  try {
+    await navigator.clipboard.writeText(broadcastOverlayUrl.value);
+    message.success("URL del overlay copiada");
+  } catch {
+    message.error("No se pudo copiar la URL");
+  }
+}
+
+const isTournamentMode = computed(() => Boolean(tournamentContext.value));
 const hasUpcomingMatch = computed(
   () => (tournamentContext.value?.upcomingMatches.length ?? 0) > 0
 );
@@ -330,29 +402,62 @@ const normalizeGameMinutes = () => {
 const publishOptions = () => {
   const state = scoreboardStore.state;
   const opts: {
-    organizerId: string | null;
+    organizerId?: string;
     title: string;
     tournamentId?: string | null;
   } = {
-    organizerId: auth.userId,
     title: `${state.localTeam} vs ${state.visitTeam}`,
   };
-  if (activeTournamentId.value) {
-    opts.tournamentId = activeTournamentId.value;
+  if (auth.profile && auth.userId) {
+    opts.organizerId = auth.userId;
+  }
+  if (tournamentContext.value) {
+    opts.tournamentId = tournamentContext.value.tournament.id;
   }
   return opts;
 };
 
 let publishTimeout: number | null = null;
 let controlsTicker: number | null = null;
+let remoteHeartbeat: number | null = null;
+let lastPublishErrorToastAt = 0;
 
-/** El reloj visible en UI debe estar en el store antes de publicar (evita reset en TV/live). */
-function syncClocksToStore() {
+const { needsArmClick, armNow } = useOperatorCloseGuard();
+
+/** Sincroniza UI → store antes de publicar (goles, nombres, reloj, penalidades). */
+function syncControlsToStore() {
   touchControlsWriterHeartbeat();
   scoreboardStore.updatePartial({
+    localTeam: local.value,
+    visitTeam: visit.value,
+    goalLocal: Number(localGoals.value) || 0,
+    goalVisit: Number(visitGoals.value) || 0,
+    gamePeriod: Number(gamePeriod.value) || 1,
     timeGame: formattedTime.value,
     penaltyGame: formattedPenalty.value,
+    isPaused: isPaused.value,
+    penalizedLocal: penalizedLocal.value,
+    penalizedVisit: penalizedVisit.value,
   });
+}
+
+async function pushRemoteState(showError = false) {
+  if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
+  syncControlsToStore();
+  try {
+    await publishMatchState(activeMatchId.value, scoreboardStore.state, {
+      ...publishOptions(),
+      isLive: true,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "No se pudo publicar el marcador";
+    console.error("[controls] publish", msg);
+    const now = Date.now();
+    if (showError || now - lastPublishErrorToastAt > 30_000) {
+      message.error(msg);
+      lastPublishErrorToastAt = now;
+    }
+  }
 }
 
 function clearPendingPublish() {
@@ -370,51 +475,53 @@ const scheduleRemotePublish = () => {
   publishTimeout = window.setTimeout(() => {
     publishTimeout = null;
     if (advancingMatch.value) return;
-    syncClocksToStore();
-    void publishMatchState(activeMatchId.value, scoreboardStore.state, {
-      ...publishOptions(),
-      isLive: true,
-    });
+    void pushRemoteState();
   }, 120);
 };
 
 const flushRemotePublish = () => {
   if (advancingMatch.value || !isRemoteSyncEnabled() || !activeMatchId.value) return;
   clearPendingPublish();
-  syncClocksToStore();
-  void publishMatchState(activeMatchId.value, scoreboardStore.state, {
-    ...publishOptions(),
-    isLive: true,
-  });
+  void pushRemoteState(true);
 };
 
 async function loadTournamentContext() {
-  if (!remoteSyncEnabled || !activeMatchId.value) {
-    if (!activeTournamentId.value) {
-      tournamentContext.value = null;
-    }
+  if (!activeMatchId.value) {
+    tournamentContext.value = null;
+    activeTournamentId.value = null;
     return;
   }
 
+  if (!remoteSyncEnabled.value) {
+    tournamentContext.value = null;
+    activeTournamentId.value = null;
+    return;
+  }
+
+  loadingTournamentDepth += 1;
   loadingTournament.value = true;
   try {
-    let ctx = await fetchTournamentControlsContext(activeMatchId.value);
-    if (!ctx && activeTournamentId.value) {
-      ctx = await fetchTournamentControlsContextByTournamentId(
-        activeTournamentId.value,
-        activeMatchId.value,
-        getActiveCourt() ?? tournamentContext.value?.court
-      );
-    }
+    const ctx = await withTimeout(
+      fetchTournamentControlsContext(activeMatchId.value),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo cargar el torneo (tiempo de espera agotado)"
+    );
     if (ctx) {
       activeTournamentId.value = ctx.tournament.id;
       setActiveTournamentId(ctx.tournament.id);
+      setActiveCourt(ctx.court);
       tournamentContext.value = ctx;
-    } else if (!activeTournamentId.value) {
+    } else {
+      activeTournamentId.value = null;
+      clearActiveTournamentSession();
       tournamentContext.value = null;
     }
+  } catch (error) {
+    console.error("[controls] tournament context", error);
+    message.error(error instanceof Error ? error.message : "Error al cargar el torneo");
   } finally {
-    loadingTournament.value = false;
+    loadingTournamentDepth = Math.max(0, loadingTournamentDepth - 1);
+    loadingTournament.value = loadingTournamentDepth > 0;
   }
 }
 
@@ -508,7 +615,7 @@ const togglePause = () => {
 };
 
 const changeGoalLocal = (value: number) => {
-  syncClocksToStore();
+  syncControlsToStore();
   const next = Math.max(0, scoreboardStore.state.goalLocal + value);
   scoreboardStore.updatePartial({ goalLocal: next });
   localGoals.value = String(next);
@@ -517,7 +624,7 @@ const changeGoalLocal = (value: number) => {
 };
 
 const changeGoalVisit = (value: number) => {
-  syncClocksToStore();
+  syncControlsToStore();
   const next = Math.max(0, scoreboardStore.state.goalVisit + value);
   scoreboardStore.updatePartial({ goalVisit: next });
   visitGoals.value = String(next);
@@ -669,16 +776,35 @@ async function finishCurrentTournamentMatchIfNeeded() {
 
   await finishTournamentMatch(current.id, finishedState);
 
-  if (remoteSyncEnabled) {
-    await publishMatchState(finishedMatchId, finishedState, {
-      organizerId: auth.userId,
-      title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
-      tournamentId:
-        tournamentContext.value?.tournament.id ?? activeTournamentId.value ?? undefined,
-      isLive: false,
+  if (remoteSyncEnabled.value) {
+    void withTimeout(
+      publishMatchState(finishedMatchId, finishedState, {
+        organizerId: auth.userId,
+        title: `${finishedState.localTeam} vs ${finishedState.visitTeam}`,
+        tournamentId:
+          tournamentContext.value?.tournament.id ?? activeTournamentId.value ?? undefined,
+        isLive: false,
+      }),
+      TOURNAMENT_OP_TIMEOUT_MS
+    ).catch((error) => {
+      console.error("[controls] finish publish", error);
     });
   } else {
-    await setMatchLiveStatus(finishedMatchId, false);
+    void setMatchLiveStatus(finishedMatchId, false);
+  }
+}
+
+async function ensureTournamentCourtStream() {
+  const ctx = tournamentContext.value;
+  if (!ctx || !activeMatchId.value || !remoteSyncEnabled.value) return;
+  try {
+    await syncTournamentCourtStreamForMatch(
+      ctx.tournament.id,
+      ctx.court,
+      activeMatchId.value
+    );
+  } catch (error) {
+    console.error("[controls] court stream", error);
   }
 }
 
@@ -690,6 +816,7 @@ function applyTournamentMatchToControls(scheduled: TournamentMatch, matchId: str
   });
 
   setActiveMatchId(matchId);
+  setActiveCourt(scheduled.court);
   activeMatchId.value = matchId;
   scoreboardStore.setState(freshState);
   penalizedLocal.value = false;
@@ -705,35 +832,63 @@ async function activateTournamentMatch(scheduled: TournamentMatch) {
   }
   if (advancingMatch.value) return;
 
+  if (!tournamentContext.value) {
+    await loadTournamentContext();
+  }
+
   startingMatchId.value = scheduled.id;
   clearPendingPublish();
   advancingMatch.value = true;
   try {
-    await loadTournamentContext();
-    await finishCurrentTournamentMatchIfNeeded();
+    await withTimeout(
+      finishCurrentTournamentMatchIfNeeded(),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo finalizar el partido anterior"
+    );
 
     activeTournamentId.value = scheduled.tournamentId;
     setActiveTournamentId(scheduled.tournamentId);
 
-    const { matchId } = await startTournamentMatch(scheduled.id, auth.userId);
-    applyTournamentMatchToControls(scheduled, matchId);
+    const { matchId, tournamentId, court } = await withTimeout(
+      startTournamentMatch(scheduled.id, auth.userId),
+      TOURNAMENT_OP_TIMEOUT_MS,
+      "No se pudo iniciar el partido en el servidor"
+    );
 
-    await router.replace({ path: "/controls", query: { matchId } });
+    applyTournamentMatchToControls(scheduled, matchId);
+    syncControlsToStore();
+
+    void router.replace({ path: "/controls", query: { matchId } });
     notifyScoreboardSync();
     notifyMatchChanged(matchId);
 
-    if (remoteSyncEnabled) {
-      syncClocksToStore();
-      await publishMatchState(matchId, scoreboardStore.state, {
-        ...publishOptions(),
-        organizerId: auth.userId,
-        isLive: true,
+    if (remoteSyncEnabled.value) {
+      void withTimeout(
+        syncTournamentCourtStreamForMatch(tournamentId, court, matchId),
+        TOURNAMENT_OP_TIMEOUT_MS
+      ).catch((error) => {
+        console.error("[controls] court stream", error);
+        message.warning(
+          "Partido iniciado, pero la URL fija de transmisión no se actualizó. Revisa tournament_court_streams en Supabase."
+        );
+      });
+
+      void withTimeout(
+        publishMatchState(matchId, scoreboardStore.state, {
+          ...publishOptions(),
+          organizerId: auth.userId,
+          isLive: true,
+        }),
+        TOURNAMENT_OP_TIMEOUT_MS
+      ).catch((error) => {
+        console.error("[controls] publish new match", error);
       });
     }
 
-    await loadTournamentContext();
+    void loadTournamentContext();
+
     message.success(
-      `${scheduled.localTeam} vs ${scheduled.visitTeam}. Nueva URL live: ${getPublicLiveUrl(matchId)}`
+      `${scheduled.localTeam} vs ${scheduled.visitTeam}. Overlay y live de transmisión siguen con la misma URL.`
     );
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo cargar el partido");
@@ -766,7 +921,7 @@ async function startNextTournamentMatch() {
   const confirmed = window.confirm(
     `¿Pasar al siguiente partido?\n\n` +
       `${next.localTeam} vs ${next.visitTeam} (${next.timeGame})\n\n` +
-      "Se reinician goles, periodo y relojes. Habra una nueva URL de live para espectadores."
+      "Se reinician goles, periodo y relojes. La URL de transmisión (overlay/OBS) se mantiene."
   );
   if (!confirmed) return;
 
@@ -793,7 +948,7 @@ const startNewMatch = async () => {
   activeMatchId.value = newMatchId;
   scoreboardStore.setState(freshState);
   activeTournamentId.value = null;
-  setActiveTournamentId(null);
+  clearActiveTournamentSession();
   tournamentContext.value = null;
 
   penalizedLocal.value = false;
@@ -805,7 +960,7 @@ const startNewMatch = async () => {
   notifyScoreboardSync();
   notifyMatchChanged(newMatchId);
 
-  if (remoteSyncEnabled) {
+  if (remoteSyncEnabled.value) {
     await publishMatchState(newMatchId, scoreboardStore.state, publishOptions());
   }
 };
@@ -870,6 +1025,64 @@ const onGameTimeEnded = () => {
   showTimeEndedAlert.value = true;
 };
 
+const prefsStore = useUserPreferencesStore();
+
+function runShortcutAction(action: ControlShortcutAction) {
+  switch (action) {
+    case "goalLocalPlus":
+      changeGoalLocal(1);
+      break;
+    case "goalLocalMinus":
+      changeGoalLocal(-1);
+      break;
+    case "goalVisitPlus":
+      changeGoalVisit(1);
+      break;
+    case "goalVisitMinus":
+      changeGoalVisit(-1);
+      break;
+    case "penalizedLocal":
+      togglePenalizedLocal();
+      break;
+    case "penalizedVisit":
+      togglePenalizedVisit();
+      break;
+    case "togglePause":
+      togglePause();
+      break;
+    case "changePeriod":
+      changePeriod();
+      break;
+    case "timePlus5":
+      adjustGameTime(5);
+      break;
+    case "timeMinus5":
+      adjustGameTime(-5);
+      break;
+    case "timePlus10":
+      adjustGameTime(10);
+      break;
+    case "timeMinus10":
+      adjustGameTime(-10);
+      break;
+    default:
+      break;
+  }
+}
+
+function onControlKeydown(event: KeyboardEvent) {
+  if (advancingMatch.value || isTypingTarget(event.target)) return;
+
+  const action = findControlActionForKey(
+    event.code,
+    prefsStore.prefs.controlShortcuts
+  );
+  if (!action) return;
+
+  event.preventDefault();
+  runShortcutAction(action);
+}
+
 onMounted(async () => {
   document.title = "Controles";
 
@@ -877,7 +1090,6 @@ onMounted(async () => {
     typeof route.query.matchId === "string" ? route.query.matchId : null
   );
   activeMatchId.value = matchId;
-  activeTournamentId.value = getActiveTournamentId();
   if (route.query.matchId !== matchId) {
     router.replace({ path: "/controls", query: { matchId } });
   }
@@ -891,19 +1103,41 @@ onMounted(async () => {
   await auth.init();
   await loadTournamentContext();
 
-  if (remoteSyncEnabled && activeMatchId.value) {
-    const remoteState = await fetchMatchState(activeMatchId.value);
-    if (!remoteState) {
-      scheduleRemotePublish();
-    } else if (
-      isRemoteStateNewer(remoteState, scoreboardStore.state.updatedAt)
-    ) {
-      scoreboardStore.setState(normalizeScoreboardState(remoteState));
-      syncUiFromLocalStorage();
-      notifyScoreboardSync();
-    } else {
-      scheduleRemotePublish();
+  const scheduledCurrent = tournamentContext.value?.currentMatch;
+  if (
+    scheduledCurrent?.status === "scheduled" &&
+    auth.userId &&
+    activeMatchId.value
+  ) {
+    try {
+      await markTournamentMatchLive(scheduledCurrent.id, auth.userId);
+      await loadTournamentContext();
+    } catch (error) {
+      console.error("[controls] mark live", error);
     }
+  }
+
+  await ensureTournamentCourtStream();
+
+  if (remoteSyncEnabled.value && activeMatchId.value) {
+    try {
+      const remote = await fetchMatchState(activeMatchId.value);
+      if (
+        remote &&
+        isRemoteStateNewer(remote.state, scoreboardStore.state.updatedAt)
+      ) {
+        scoreboardStore.setState(normalizeScoreboardState(remote.state));
+        syncUiFromLocalStorage();
+        notifyScoreboardSync();
+      }
+    } catch (error) {
+      console.error("[controls] initial fetch", error);
+    }
+    await pushRemoteState(true);
+
+    remoteHeartbeat = window.setInterval(() => {
+      if (!advancingMatch.value) void pushRemoteState();
+    }, getPollIntervalMs());
   }
 
   controlsTicker = window.setInterval(() => {
@@ -912,9 +1146,12 @@ onMounted(async () => {
 
   window.addEventListener("storage", syncWithStorage);
   window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
+  prefsStore.hydrate();
+  window.addEventListener("keydown", onControlKeydown);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("keydown", onControlKeydown);
   window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
   window.removeEventListener("beforeunload", releaseControlsWriter);
   releaseControlsWriter();
@@ -924,6 +1161,9 @@ onUnmounted(() => {
   }
   if (controlsTicker) {
     window.clearInterval(controlsTicker);
+  }
+  if (remoteHeartbeat) {
+    window.clearInterval(remoteHeartbeat);
   }
   window.removeEventListener("storage", syncWithStorage);
 });
@@ -998,6 +1238,11 @@ watch(visit, updateVisitlTeam);
 
 .live-link {
   color: #1677ff;
+}
+
+.live-link--muted {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
 }
 
 .controls-row {

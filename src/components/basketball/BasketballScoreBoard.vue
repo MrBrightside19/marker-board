@@ -1,24 +1,6 @@
 <template>
   <div class="basketball-board font-digital">
-    <div aria-hidden="true" />
-
-    <div class="session-bar">
-      <router-link to="/" class="session-link">Inicio</router-link>
-      <template v-if="activeMatchId && remoteSyncEnabled">
-        <span class="session-label">Partido: {{ activeMatchId }}</span>
-        <a class="session-link" :href="publicUrl" target="_blank" rel="noopener">Live público</a>
-      </template>
-    </div>
-
-    <a-button
-      type="primary"
-      size="large"
-      class="controls-button"
-      @click="openControlsInNewTab"
-    >
-      Controles
-    </a-button>
-
+    <OperatorCloseGuardBanner :needs-arm-click="needsArmClick" :arm-now="armNow" />
     <div class="board-stage">
       <div class="board-grid">
         <div class="team-panel local">
@@ -60,11 +42,9 @@ import {
   isBasketballRemoteSyncEnabled,
 } from "../../services/basketballMatchSync";
 import { getPollIntervalMs } from "../../config/sync";
-import {
-  getBasketballPublicLiveUrl,
-  resolveActiveMatchId,
-  setActiveMatchId,
-} from "../../utils/activeMatch";
+import { resolveActiveMatchId, setActiveMatchId } from "../../utils/activeMatch";
+import OperatorCloseGuardBanner from "../OperatorCloseGuardBanner.vue";
+import { useOperatorCloseGuard } from "../../composables/useOperatorCloseGuard";
 import { getBasketballRunningClock } from "../../utils/basketballClock";
 import {
   BASKETBALL_MATCH_CHANGED_EVENT,
@@ -84,12 +64,10 @@ const nowMs = ref(Date.now());
 const showTimeEndedAlert = ref(false);
 const pollIntervalMs = getPollIntervalMs();
 
+const { needsArmClick, armNow } = useOperatorCloseGuard();
+
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;
-
-const publicUrl = computed(() =>
-  activeMatchId.value ? getBasketballPublicLiveUrl(activeMatchId.value) : ""
-);
 
 const snapshot = computed(() => store.state);
 
@@ -99,19 +77,6 @@ const displayClock = computed(() => {
   }
   return getBasketballRunningClock(snapshot.value, nowMs.value);
 });
-
-function openControlsInNewTab() {
-  const routeLocation = router.resolve({
-    path: "/basquet/controls",
-    query: activeMatchId.value ? { matchId: activeMatchId.value } : {},
-  });
-  const width = 920;
-  const height = 720;
-  const left = (window.screen.width - width) / 2;
-  const top = (window.screen.height - height) / 2;
-  const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`;
-  window.open(routeLocation.href, "basketballControlsWindow", features);
-}
 
 function syncFromStore() {
   store.hydrateFromLocalStorage();
@@ -217,30 +182,6 @@ onUnmounted(() => {
     background: rgba(255, 140, 40, 0.25);
     transform: translateY(-50%);
   }
-}
-
-.session-bar {
-  position: absolute;
-  top: clamp(8px, 2vh, 20px);
-  left: clamp(8px, 2vh, 20px);
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: clamp(12px, 1.4vw, 18px);
-}
-
-.session-link {
-  color: #ffb366;
-}
-
-.controls-button {
-  position: absolute;
-  top: clamp(8px, 2vh, 20px);
-  right: clamp(8px, 2vh, 20px);
-  z-index: 10;
-  background: #ff6b00;
-  border-color: #ff6b00;
 }
 
 .board-stage {

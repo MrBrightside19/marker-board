@@ -51,3 +51,19 @@ export function isRemoteStateNewer(
   if (!localUpdatedAt) return true;
   return new Date(remote.updatedAt).getTime() > new Date(localUpdatedAt).getTime();
 }
+
+/** Compara el marcador ignorando updatedAt (evita re-render si solo cambió el reloj local entre polls). */
+export function isSameScoreboardState(a: ScoreboardState, b: ScoreboardState): boolean {
+  return (
+    a.localTeam === b.localTeam &&
+    a.visitTeam === b.visitTeam &&
+    a.goalLocal === b.goalLocal &&
+    a.goalVisit === b.goalVisit &&
+    a.gamePeriod === b.gamePeriod &&
+    a.timeGame === b.timeGame &&
+    a.penaltyGame === b.penaltyGame &&
+    a.isPaused === b.isPaused &&
+    a.penalizedLocal === b.penalizedLocal &&
+    a.penalizedVisit === b.penalizedVisit
+  );
+}

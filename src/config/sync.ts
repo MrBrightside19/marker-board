@@ -1,12 +1,11 @@
-const DEFAULT_POLL_INTERVAL_MS = 5000;
-const MIN_POLL_INTERVAL_MS = 1000;
+import { readUserPreferences } from "../services/userPreferencesStorage";
+import { POLL_INTERVAL_MIN_MS } from "../types/userPreferences";
 
-/** Intervalo de poll REST (live y marcador remoto). Configurable con VITE_POLL_INTERVAL_MS */
+const DEFAULT_POLL_INTERVAL_MS = 5000;
+
+/** Intervalo de poll REST (live, marcador remoto, torneo público). */
 export function getPollIntervalMs(): number {
-  const raw = import.meta.env.VITE_POLL_INTERVAL_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < MIN_POLL_INTERVAL_MS) {
-    return DEFAULT_POLL_INTERVAL_MS;
-  }
-  return Math.floor(parsed);
+  return readUserPreferences().pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
 }
+
+export { POLL_INTERVAL_MIN_MS };
