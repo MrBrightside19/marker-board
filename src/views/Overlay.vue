@@ -261,6 +261,7 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--scoreboard-fg, #fff);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
@@ -272,6 +273,7 @@ $overlay-bg: rgba(0, 0, 0, 0.7);
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  color: var(--scoreboard-fg, #fff);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
 

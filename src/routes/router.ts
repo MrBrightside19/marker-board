@@ -13,9 +13,11 @@ import BasketballPublicBoard from "../views/BasketballPublicBoard.vue";
 import Overlay from "../views/Overlay.vue";
 import TournamentCourtLive from "../views/TournamentCourtLive.vue";
 import TournamentCourtOverlay from "../views/TournamentCourtOverlay.vue";
+import Profile from "../views/Profile.vue";
 
 const routes = [
   { path: "/", name: "home", component: Home },
+  { path: "/profile", name: "profile", component: Profile },
   { path: "/tournaments", name: "tournaments", component: Tournaments },
   { path: "/torneos-publicos", name: "public-tournaments", component: PublicTournaments },
   { path: "/tournaments/:id", name: "tournament-detail", component: TournamentDetail },

@@ -262,7 +262,7 @@ function onProfileMenu(key: string) {
     return;
   }
   if (key === "profile") {
-    message.info("La configuración de perfil estará disponible pronto.");
+    router.push("/profile");
   }
 }
 
@@ -295,6 +295,7 @@ function openAuthModal(mode: "login" | "register") {
 
 function onAuthSuccess() {
   authModalVisible.value = false;
+  message.success(`Bienvenido, ${auth.displayName}`);
   emit("auth-success");
 }
 
@@ -310,8 +311,8 @@ defineExpose({
   align-items: center;
   gap: 12px 16px;
   padding: 10px clamp(16px, 4vw, 48px);
-  background: #141414;
-  border-bottom: 1px solid #303030;
+  background: var(--app-nav-bg, #141414);
+  border-bottom: 1px solid var(--app-nav-border, #303030);
 }
 
 .nav-brand {

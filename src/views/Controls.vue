@@ -274,9 +274,16 @@ import {
   touchControlsWriterHeartbeat,
 } from "../utils/scoreboardSync";
 import { useAuthStore } from "../stores/auth";
+import { useUserPreferencesStore } from "../stores/userPreferences";
+import {
+  findControlActionForKey,
+  isTypingTarget,
+} from "../utils/controlShortcuts";
+import type { ControlShortcutAction } from "../types/userPreferences";
 import type { TournamentMatch } from "../types/tournament";
 import {
   fetchTournamentControlsContext,
+  markTournamentMatchLive,
   finishTournamentMatch,
   startTournamentMatch,
   syncTournamentCourtStreamForMatch,
@@ -1018,6 +1025,64 @@ const onGameTimeEnded = () => {
   showTimeEndedAlert.value = true;
 };
 
+const prefsStore = useUserPreferencesStore();
+
+function runShortcutAction(action: ControlShortcutAction) {
+  switch (action) {
+    case "goalLocalPlus":
+      changeGoalLocal(1);
+      break;
+    case "goalLocalMinus":
+      changeGoalLocal(-1);
+      break;
+    case "goalVisitPlus":
+      changeGoalVisit(1);
+      break;
+    case "goalVisitMinus":
+      changeGoalVisit(-1);
+      break;
+    case "penalizedLocal":
+      togglePenalizedLocal();
+      break;
+    case "penalizedVisit":
+      togglePenalizedVisit();
+      break;
+    case "togglePause":
+      togglePause();
+      break;
+    case "changePeriod":
+      changePeriod();
+      break;
+    case "timePlus5":
+      adjustGameTime(5);
+      break;
+    case "timeMinus5":
+      adjustGameTime(-5);
+      break;
+    case "timePlus10":
+      adjustGameTime(10);
+      break;
+    case "timeMinus10":
+      adjustGameTime(-10);
+      break;
+    default:
+      break;
+  }
+}
+
+function onControlKeydown(event: KeyboardEvent) {
+  if (advancingMatch.value || isTypingTarget(event.target)) return;
+
+  const action = findControlActionForKey(
+    event.code,
+    prefsStore.prefs.controlShortcuts
+  );
+  if (!action) return;
+
+  event.preventDefault();
+  runShortcutAction(action);
+}
+
 onMounted(async () => {
   document.title = "Controles";
 
@@ -1037,6 +1102,21 @@ onMounted(async () => {
 
   await auth.init();
   await loadTournamentContext();
+
+  const scheduledCurrent = tournamentContext.value?.currentMatch;
+  if (
+    scheduledCurrent?.status === "scheduled" &&
+    auth.userId &&
+    activeMatchId.value
+  ) {
+    try {
+      await markTournamentMatchLive(scheduledCurrent.id, auth.userId);
+      await loadTournamentContext();
+    } catch (error) {
+      console.error("[controls] mark live", error);
+    }
+  }
+
   await ensureTournamentCourtStream();
 
   if (remoteSyncEnabled.value && activeMatchId.value) {
@@ -1066,9 +1146,12 @@ onMounted(async () => {
 
   window.addEventListener("storage", syncWithStorage);
   window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
+  prefsStore.hydrate();
+  window.addEventListener("keydown", onControlKeydown);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("keydown", onControlKeydown);
   window.removeEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
   window.removeEventListener("beforeunload", releaseControlsWriter);
   releaseControlsWriter();

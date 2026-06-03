@@ -367,8 +367,8 @@ watch(penaltyMilliseconds, (newVal) => {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #000;
-  color: #fff;
+  background: var(--scoreboard-bg, #000);
+  color: var(--scoreboard-fg, #fff);
 }
 
 .scoreboard-stage {

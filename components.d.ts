@@ -28,7 +28,7 @@ declare module 'vue' {
     ARow: typeof import('ant-design-vue/es')['Row']
     ASegmented: typeof import('ant-design-vue/es')['Segmented']
     ASelect: typeof import('ant-design-vue/es')['Select']
-    ASpace: typeof import('ant-design-vue/es')['Space']
+    ASlider: typeof import('ant-design-vue/es')['Slider']
     ASpin: typeof import('ant-design-vue/es')['Spin']
     ATable: typeof import('ant-design-vue/es')['Table']
     ATag: typeof import('ant-design-vue/es')['Tag']
@@ -42,6 +42,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScoreBoard: typeof import('./src/components/ScoreBoard.vue')['default']
+    ShortcutKeyInput: typeof import('./src/components/settings/ShortcutKeyInput.vue')['default']
     SportPicker: typeof import('./src/components/sport/SportPicker.vue')['default']
     TournamentStandingsPanel: typeof import('./src/components/tournament/TournamentStandingsPanel.vue')['default']
   }

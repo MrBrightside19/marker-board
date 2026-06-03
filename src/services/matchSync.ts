@@ -1,7 +1,19 @@
+import { normalizeBasketballState } from "../stores/basketballScoreboard";
 import { normalizeScoreboardState } from "../stores/scoreboard";
 import type { ScoreboardState } from "../types/scoreboard";
+import {
+  isBasketballScoreboardState,
+  type BasketballScoreboardState,
+} from "../types/basketballScoreboard";
 import { registerMatchRecord } from "./liveMatchesService";
-import { isSupabaseRestConfigured, restGetMatchRow } from "./supabaseRest";
+import { isSupabaseRestConfigured, restGetMatchRow, restGetRows } from "./supabaseRest";
+
+export type LiveScoreSnapshot = {
+  goalLocal: number;
+  goalVisit: number;
+  timeGame: string;
+  gamePeriod: number;
+};
 
 export type MatchRemoteSnapshot = {
   state: ScoreboardState;
@@ -43,6 +55,7 @@ export async function publishMatchState(
   if (!ok) {
     throw new Error("No se pudo guardar el marcador en el servidor");
   }
+  /* El poll de Inicio/torneos públicos actualiza el listado; no avisar en cada heartbeat de Controles. */
 }
 
 /** Lee el marcador por REST (GET explícito, aparece en Network). */
@@ -68,4 +81,51 @@ export async function fetchMatchState(matchId: string): Promise<MatchRemoteSnaps
 export async function fetchMatchStateLegacy(matchId: string): Promise<ScoreboardState | null> {
   const snapshot = await fetchMatchState(matchId);
   return snapshot?.state ?? null;
+}
+
+function snapshotFromState(
+  state: ScoreboardState | BasketballScoreboardState
+): LiveScoreSnapshot {
+  if (isBasketballScoreboardState(state)) {
+    const normalized = normalizeBasketballState(state);
+    return {
+      goalLocal: normalized.pointsLocal,
+      goalVisit: normalized.pointsVisit,
+      timeGame: normalized.timeGame,
+      gamePeriod: normalized.gamePeriod,
+    };
+  }
+  const normalized = normalizeScoreboardState(state);
+  return {
+    goalLocal: normalized.goalLocal,
+    goalVisit: normalized.goalVisit,
+    timeGame: normalized.timeGame,
+    gamePeriod: normalized.gamePeriod,
+  };
+}
+
+/** Marcador en vivo desde tabla matches (una sola petición REST para varios partidos). */
+export async function fetchLiveScoresByMatchIds(
+  matchIds: string[]
+): Promise<Record<string, LiveScoreSnapshot>> {
+  const unique = [...new Set(matchIds.filter(Boolean))];
+  if (!unique.length || !isSupabaseRestConfigured()) return {};
+
+  try {
+    const rows = await restGetRows<{ id: string; state: unknown }>("matches", {
+      select: "id,state",
+      id: `in.(${unique.join(",")})`,
+    });
+
+    const out: Record<string, LiveScoreSnapshot> = {};
+    for (const row of rows) {
+      if (!row?.id || !row.state) continue;
+      const raw = row.state as ScoreboardState | BasketballScoreboardState;
+      out[row.id] = snapshotFromState(raw);
+    }
+    return out;
+  } catch (error) {
+    console.error("[matchSync] live scores batch", error);
+    return {};
+  }
 }

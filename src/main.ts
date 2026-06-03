@@ -6,7 +6,10 @@ import './style.css'
 import './assets/scss/main.scss'
 import router from './routes/router'
 import { createPinia } from 'pinia'
+import { applyUserPreferencesToDocument } from './services/userPreferencesStorage'
 import { useAuthStore } from './stores/auth'
+
+applyUserPreferencesToDocument()
 
 const app = createApp(App)
 const pinia = createPinia()

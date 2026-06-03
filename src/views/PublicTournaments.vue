@@ -44,14 +44,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useScheduledRefresh } from "../composables/useScheduledRefresh";
 import { useAuthStore } from "../stores/auth";
 import { useSelectedSportStore } from "../stores/selectedSport";
 import { fetchActiveTournamentsWithResults } from "../services/tournamentService";
 import type { ActiveTournamentSummary } from "../types/tournament";
 import { tournamentPublicRoute } from "../utils/routes";
+import { onLiveMatchesBump } from "../utils/liveMatchesSync";
 
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const selectedSport = useSelectedSportStore();
@@ -59,15 +62,24 @@ const selectedSport = useSelectedSportStore();
 const tournaments = ref<ActiveTournamentSummary[]>([]);
 const loading = ref(false);
 
-async function load() {
-  loading.value = true;
-  try {
-    tournaments.value = await fetchActiveTournamentsWithResults(
-      selectedSport.sportId ? { sportId: selectedSport.sportId } : undefined
-    );
-  } finally {
-    loading.value = false;
-  }
+let stopLiveBump: (() => void) | null = null;
+
+const scheduler = useScheduledRefresh({
+  loading,
+  isActive: () => route.name === "public-tournaments",
+  load: async () => {
+    try {
+      tournaments.value = await fetchActiveTournamentsWithResults(
+        selectedSport.sportId ? { sportId: selectedSport.sportId } : undefined
+      );
+    } catch (error) {
+      console.error("[public-tournaments] load", error);
+    }
+  },
+});
+
+function activatePage() {
+  scheduler.start();
 }
 
 function goToPublic(id: string) {
@@ -76,13 +88,39 @@ function goToPublic(id: string) {
 
 watch(
   () => selectedSport.sportId,
-  () => void load()
+  () => {
+    if (route.name === "public-tournaments") {
+      scheduler.refresh({ showSpinner: tournaments.value.length === 0, force: true });
+    }
+  }
 );
 
-onMounted(async () => {
+watch(
+  () => route.name,
+  (name, prev) => {
+    if (name === "public-tournaments" && prev !== "public-tournaments") {
+      activatePage();
+    } else if (name !== "public-tournaments") {
+      scheduler.stop();
+    }
+  }
+);
+
+onMounted(() => {
   document.title = "Torneos públicos";
-  await auth.init();
-  await load();
+  document.addEventListener("visibilitychange", scheduler.onVisibilityChange);
+  stopLiveBump = onLiveMatchesBump(() => scheduler.scheduleBumpRefresh());
+
+  if (route.name === "public-tournaments") {
+    activatePage();
+  }
+});
+
+onUnmounted(() => {
+  scheduler.stop();
+  stopLiveBump?.();
+  stopLiveBump = null;
+  document.removeEventListener("visibilitychange", scheduler.onVisibilityChange);
 });
 </script>
 

@@ -9,6 +9,7 @@ import {
   upsertProfile,
 } from "../services/authService";
 import { getSupabase } from "../services/supabaseClient";
+import { withTimeout } from "../utils/async";
 
 function roleFromUser(user: User): UserRole {
   const role = user.user_metadata?.role;
@@ -21,7 +22,16 @@ function displayNameFromUser(user: User): string {
   return user.email?.split("@")[0] || "Usuario";
 }
 
+function profileFromUser(user: User): UserProfile {
+  return {
+    id: user.id,
+    role: roleFromUser(user),
+    displayName: displayNameFromUser(user),
+  };
+}
+
 let initPromise: Promise<void> | null = null;
+let authListenerAttached = false;
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -69,42 +79,44 @@ export const useAuthStore = defineStore("auth", {
         }
       };
 
-      await new Promise<void>((resolve) => {
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error("[auth] getSession", error.message);
+        }
+        await applySession(data.session ?? null);
+      } catch (error) {
+        console.error("[auth] bootstrap getSession", error);
+        this.session = null;
+        this.profile = null;
+      }
 
+      if (!authListenerAttached) {
+        authListenerAttached = true;
         supabase.auth.onAuthStateChange(async (event, session) => {
-          if (!this.initialized) {
-            if (event === "INITIAL_SESSION") {
-              await applySession(session);
-              finish();
-            }
-            return;
-          }
+          if (event === "INITIAL_SESSION") return;
 
           if (event === "SIGNED_OUT") {
-            await applySession(null);
+            this.session = null;
+            this.profile = null;
             return;
           }
 
-          if (session?.user) {
-            await applySession(session);
+          if (event === "TOKEN_REFRESHED") return;
+
+          if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+            if (!session?.user) return;
+            this.session = session;
+            try {
+              await this.syncProfile(session.user);
+            } catch (error) {
+              console.error("[auth] onAuthStateChange profile", error);
+              this.profile = profileFromUser(session.user);
+            }
           }
         });
+      }
 
-        void supabase.auth.getSession().then(async ({ data: sessionData }) => {
-          if (sessionData.session) {
-            await applySession(sessionData.session);
-            finish();
-          }
-        });
-
-        window.setTimeout(finish, 2500);
-      });
       this.loading = false;
       this.initialized = true;
     },
@@ -118,17 +130,26 @@ export const useAuthStore = defineStore("auth", {
           displayNameFromUser(user)
         );
       }
-      this.profile = profile;
+      this.profile = profile ?? profileFromUser(user);
     },
 
     async signIn(email: string, password: string) {
       const { session } = await signInWithPassword(email, password);
-      if (!session) {
+      if (!session?.user) {
         throw new Error("No se pudo iniciar sesión. Verifica tu correo y contraseña.");
       }
+
       this.session = session;
-      if (session.user) {
-        await this.syncProfile(session.user);
+
+      try {
+        await withTimeout(
+          this.syncProfile(session.user),
+          12_000,
+          "No se pudo cargar el perfil"
+        );
+      } catch (error) {
+        console.error("[auth] signIn profile", error);
+        this.profile = profileFromUser(session.user);
       }
     },
 
@@ -148,9 +169,14 @@ export const useAuthStore = defineStore("auth", {
         this.session = session;
       }
       if (user && session) {
-        this.profile =
-          (await fetchProfile(user.id)) ||
-          (await upsertProfile(user.id, role, displayName));
+        try {
+          this.profile =
+            (await fetchProfile(user.id)) ||
+            (await upsertProfile(user.id, role, displayName)) ||
+            profileFromUser(user);
+        } catch {
+          this.profile = profileFromUser(user);
+        }
       }
       return { needsEmailConfirmation };
     },

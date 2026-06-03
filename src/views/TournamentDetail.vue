@@ -13,8 +13,8 @@
         </h1>
         <p>{{ formatDate(tournament.startDate) }} — {{ formatDate(tournament.endDate) }}</p>
         <p class="live-hint">
-          Cada partido tiene su propia URL de live. Copiala desde
-          <strong>Marcador TV</strong> o <strong>Controles</strong> al iniciar el encuentro.
+          Opera cada partido con <strong>Marcador TV</strong> y <strong>Controles</strong>.
+          Los enlaces de transmisión están al final de esta página.
         </p>
       </div>
       <a-button
@@ -28,100 +28,17 @@
       </a-button>
     </header>
 
-    <section class="share-panel">
-      <h2>Enlace para espectadores</h2>
-      <p>
-        {{
-          tournament.visibility === "public"
-            ? "Este torneo también aparece en el inicio. Comparte este enlace para acceso directo."
-            : "Torneo privado: no aparece en el inicio. Comparte este enlace para que otros vean calendario y marcadores."
-        }}
-      </p>
-      <div class="share-row">
-        <a-input :value="publicTournamentUrl" readonly />
-        <a-button type="primary" @click="copyPublicLink">Copiar enlace</a-button>
-        <router-link :to="tournamentPublicRoute(tournament.id)">
-          <a-button>Vista espectador</a-button>
-        </router-link>
-      </div>
-    </section>
-
-    <section v-if="broadcastCourts.length" class="share-panel broadcast-panel">
-      <h2>Transmisión (URL fija por cancha)</h2>
-      <p class="broadcast-intro">
-        Usa estas URLs en OBS o en la transmisión. No cambian entre partidos: al iniciar o
-        avanzar un encuentro en <strong>Controles</strong>, el marcador se actualiza solo vía
-        Supabase.
-      </p>
-      <div v-for="court in broadcastCourts" :key="court" class="broadcast-court-block">
-        <h3 class="broadcast-court-title">Cancha {{ formatCourtLabel(court) }}</h3>
-        <p class="broadcast-label">Overlay (recomendado para OBS)</p>
-        <div class="share-row">
-          <a-input :value="overlayUrlForCourt(court)" readonly />
-          <a-button type="primary" @click="copyBroadcastUrl(overlayUrlForCourt(court), 'Overlay')">
-            Copiar
-          </a-button>
-        </div>
-        <p class="broadcast-label">Live (pantalla completa)</p>
-        <div class="share-row">
-          <a-input :value="liveUrlForCourt(court)" readonly />
-          <a-button @click="copyBroadcastUrl(liveUrlForCourt(court), 'Live')">Copiar</a-button>
-        </div>
-      </div>
-    </section>
-
-    <section class="import-panel">
-      <h2>Carga masiva de partidos</h2>
-      <p>
-        Descarga la
-        <a :href="templateUrl" download target="_blank" rel="noopener">plantilla CSV</a>,
-        complétala con <strong>local</strong>, <strong>visita</strong>,
-        <strong>tiempo_juego</strong> y <strong>cancha</strong> (número o nombre;
-        por defecto <code>1</code>). Opcional:
-        <strong>fecha_programada</strong> (<code>yyyy-MM-dd HH:mm</code>).
-      </p>
-
-      <div class="import-actions">
-        <a-button :href="templateUrl" download>Descargar plantilla CSV</a-button>
-        <a-upload
-          :before-upload="handleCsvUpload"
-          :show-upload-list="false"
-          accept=".csv,text/csv"
-        >
-          <a-button type="primary" :loading="importing">Subir CSV</a-button>
-        </a-upload>
-      </div>
-
-      <a-alert
-        v-if="importErrors.length"
-        type="warning"
-        style="margin-top: 12px"
-        :message="`Se importaron ${importedCount} partidos. ${importErrors.length} filas con error.`"
-      >
-        <template #description>
-          <ul class="error-list">
-            <li v-for="err in importErrors" :key="err.line">
-              Fila {{ err.line }}: {{ err.message }}
-            </li>
-          </ul>
-        </template>
-      </a-alert>
-    </section>
-
-    <section v-if="finishedMatchCount > 0" class="standings-section">
-      <h2>Resultados y posiciones</h2>
-      <TournamentStandingsPanel :matches="tournament.matches" :results-page-size="15" />
-    </section>
-
-    <section class="matches-section">
+    <section class="panel matches-section">
       <h2>Partidos del torneo ({{ tournament.matches.length }})</h2>
-      <p class="matches-hint">
-        Usa <strong>Marcador TV</strong> y <strong>Controles</strong> para operar cada partido.
-        Para la transmisión, configura el <strong>overlay fijo</strong> de tu cancha arriba (no
-        hace falta cambiarlo entre partidos).
+      <p class="section-hint">
+        Inicia cada encuentro desde <strong>Marcador TV</strong>. El estado y el resultado se
+        actualizan al operar en Controles.
       </p>
 
-      <a-empty v-if="tournament.matches.length === 0" description="Importa partidos con el CSV" />
+      <a-empty
+        v-if="tournament.matches.length === 0"
+        description="Aún no hay partidos. Usa la carga masiva CSV al final de la página."
+      />
 
       <a-table
         v-else
@@ -130,6 +47,7 @@
         row-key="id"
         :pagination="{ pageSize: 20 }"
         size="middle"
+        class="matches-table"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'scheduledAt'">
@@ -146,20 +64,132 @@
             <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-space wrap>
-              <a-button
-                v-if="record.status !== 'finished' && tournament.status === 'active'"
-                type="primary"
-                size="small"
-                :loading="openingBoardId === record.id"
-                @click="openMarcadorTab(record)"
-              >
-                Marcador TV
-              </a-button>
-            </a-space>
+            <a-button
+              v-if="record.status !== 'finished' && tournament.status === 'active'"
+              type="primary"
+              size="small"
+              :loading="openingBoardId === record.id"
+              @click="openMarcadorTab(record)"
+            >
+              Marcador TV
+            </a-button>
           </template>
         </template>
       </a-table>
+    </section>
+
+    <section class="panel standings-section">
+      <h2>Resultados y posiciones</h2>
+      <p v-if="finishedMatchCount === 0" class="section-hint">
+        Los resultados aparecerán cuando finalices partidos desde Controles.
+      </p>
+      <TournamentStandingsPanel
+        v-if="finishedMatchCount > 0"
+        :matches="tournament.matches"
+        :results-page-size="15"
+      />
+    </section>
+
+    <section class="panel links-panel">
+      <h2>Enlaces del torneo</h2>
+      <p class="section-hint links-intro">
+        {{
+          tournament.visibility === "public"
+            ? "Comparte estos enlaces con espectadores. El torneo también puede aparecer en Inicio."
+            : "Torneo privado: comparte solo estos enlaces; no se lista en Inicio."
+        }}
+      </p>
+
+      <ol class="links-list">
+        <li class="link-card">
+          <div class="link-card-head">
+            <span class="link-order">1</span>
+            <div>
+              <h3 class="link-title">Vista pública del torneo</h3>
+              <p class="link-desc">Calendario, resultados y marcadores para espectadores</p>
+            </div>
+          </div>
+          <a-input class="link-input" :value="publicTournamentUrl" readonly />
+          <div class="link-actions">
+            <a-button type="primary" @click="copyPublicLink">Copiar enlace</a-button>
+            <router-link :to="tournamentPublicRoute(tournament.id)" class="link-action-route">
+              <a-button>Abrir vista espectador</a-button>
+            </router-link>
+          </div>
+        </li>
+
+        <template v-for="(court, courtIndex) in broadcastCourts" :key="court">
+          <li class="link-card link-card--group">
+            <div class="link-card-head">
+              <span class="link-order">{{ courtIndex + 2 }}</span>
+              <div>
+                <h3 class="link-title">Transmisión — Cancha {{ formatCourtLabel(court) }}</h3>
+                <p class="link-desc">
+                  URL fija para OBS; no cambia entre partidos de esta cancha
+                </p>
+              </div>
+            </div>
+
+            <div class="link-subitems-row">
+              <div class="link-subitem">
+                <span class="link-subtitle">Overlay (OBS)</span>
+                <a-input class="link-input" :value="overlayUrlForCourt(court)" readonly />
+                <a-button
+                  type="primary"
+                  @click="copyBroadcastUrl(overlayUrlForCourt(court), 'Overlay')"
+                >
+                  Copiar overlay
+                </a-button>
+              </div>
+
+              <div class="link-subitem">
+                <span class="link-subtitle">Live (pantalla completa)</span>
+                <a-input class="link-input" :value="liveUrlForCourt(court)" readonly />
+                <a-button @click="copyBroadcastUrl(liveUrlForCourt(court), 'Live')">
+                  Copiar live
+                </a-button>
+              </div>
+            </div>
+          </li>
+        </template>
+      </ol>
+    </section>
+
+    <section class="panel import-panel">
+      <h2>Carga masiva de partidos</h2>
+      <p class="section-hint">
+        Descarga la
+        <a :href="templateUrl" download target="_blank" rel="noopener">plantilla CSV</a>,
+        complétala con <strong>local</strong>, <strong>visita</strong>,
+        <strong>tiempo_juego</strong> y <strong>cancha</strong> (por defecto <code>1</code>).
+        Opcional: <strong>fecha_programada</strong> (<code>yyyy-MM-dd HH:mm</code>).
+      </p>
+
+      <div class="import-actions">
+        <a-button :href="templateUrl" download>Descargar plantilla CSV</a-button>
+        <a-upload
+          :before-upload="handleCsvUpload"
+          :show-upload-list="false"
+          accept=".csv,text/csv"
+        >
+          <a-button type="primary" :loading="importing">Subir CSV</a-button>
+        </a-upload>
+      </div>
+
+      <a-alert
+        v-if="importErrors.length"
+        type="warning"
+        class="import-alert"
+        :message="`Se importaron ${importedCount} partidos. ${importErrors.length} filas con error.`"
+      >
+        <template #description>
+          <ul class="error-list">
+            <li v-for="err in importErrors" :key="err.line">
+              Fila {{ err.line }}: {{ err.message }}
+            </li>
+          </ul>
+        </template>
+      </a-alert>
     </section>
   </div>
 
@@ -169,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import type { UploadProps } from "ant-design-vue";
@@ -181,9 +211,11 @@ import {
   bulkImportTournamentMatches,
   fetchTournamentWithMatches,
   finalizeTournament,
+  markTournamentMatchLive,
   startTournamentMatch,
 } from "../services/tournamentService";
 import { fetchMatchState, publishMatchState } from "../services/matchSync";
+import { notifyLiveMatchesBump } from "../utils/liveMatchesSync";
 import {
   createFreshMatchState,
   normalizeScoreboardState,
@@ -213,6 +245,7 @@ const importedCount = ref(0);
 const importErrors = ref<{ line: number; message: string }[]>([]);
 const openingBoardId = ref<string | null>(null);
 const finalizing = ref(false);
+let openMarcadorGeneration = 0;
 
 const finishedMatchCount = computed(
   () =>
@@ -303,47 +336,62 @@ function statusColor(status: TournamentMatch["status"]) {
 async function openMarcadorTab(record: TournamentMatch) {
   if (!auth.userId || !tournament.value) return;
 
+  const generation = ++openMarcadorGeneration;
   openingBoardId.value = record.id;
   try {
     let matchId = record.matchId;
     if (!matchId) {
       const started = await startTournamentMatch(record.id, auth.userId);
       matchId = started.matchId;
-      await loadTournament();
+    } else if (record.status !== "finished") {
+      await markTournamentMatchLive(record.id, auth.userId);
     }
+
+    if (generation !== openMarcadorGeneration) return;
+
+    await loadTournament();
+    if (generation !== openMarcadorGeneration || !tournament.value) return;
+
     setActiveTournamentId(tournament.value.id);
     setActiveMatchId(matchId);
 
     const remote = await fetchMatchState(matchId);
-    let state = remote?.state;
-    if (!state) {
-      state = createFreshMatchState({
+    if (generation !== openMarcadorGeneration) return;
+    const state =
+      remote?.state ??
+      createFreshMatchState({
         localTeam: record.localTeam,
         visitTeam: record.visitTeam,
         timeGame: record.timeGame,
       });
-      writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
-      openHockeyOperatorSession(router, matchId);
-      void publishMatchState(matchId, state, {
-        organizerId: auth.userId,
-        tournamentId: tournament.value.id,
-        isLive: true,
-      }).catch((error) => {
+
+    writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
+    openHockeyOperatorSession(router, matchId);
+
+    void publishMatchState(matchId, normalizeScoreboardState(state), {
+      organizerId: auth.userId,
+      tournamentId: tournament.value.id,
+      isLive: true,
+    })
+      .then(() => notifyLiveMatchesBump(true))
+      .catch((error) => {
         message.error(
           error instanceof Error ? error.message : "No se pudo publicar el marcador"
         );
       });
-      return;
-    }
-
-    writeScoreboardStateToLocalStorage(normalizeScoreboardState(state));
-    openHockeyOperatorSession(router, matchId);
   } catch (error) {
     message.error(error instanceof Error ? error.message : "No se pudo abrir el marcador");
   } finally {
-    openingBoardId.value = null;
+    if (generation === openMarcadorGeneration) {
+      openingBoardId.value = null;
+    }
   }
 }
+
+onUnmounted(() => {
+  openMarcadorGeneration += 1;
+  openingBoardId.value = null;
+});
 
 async function loadTournament() {
   const id = route.params.id?.toString();
@@ -479,22 +527,7 @@ onMounted(async () => {
   color: #69b1ff;
 }
 
-.share-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.share-row :deep(.ant-input) {
-  flex: 1 1 280px;
-  min-width: 0;
-}
-
-.share-panel,
-.import-panel,
-.standings-section,
-.matches-section {
+.panel {
   background: #141414;
   border: 1px solid #303030;
   border-radius: 12px;
@@ -502,59 +535,137 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 
-.broadcast-intro {
-  margin: 0 0 16px;
-  color: rgba(255, 255, 255, 0.65);
-  line-height: 1.5;
-}
-
-.broadcast-court-block {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #303030;
-}
-
-.broadcast-court-block:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.broadcast-court-title {
-  margin: 0 0 10px;
-  font-size: 16px;
-}
-
-.broadcast-label {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.share-panel h2,
-.import-panel h2,
-.standings-section h2,
-.matches-section h2 {
-  margin: 0 0 12px;
+.panel h2 {
+  margin: 0 0 8px;
   font-size: 18px;
 }
 
-.matches-hint {
-  margin: 0 0 12px;
+.section-hint {
+  margin: 0 0 16px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.55);
+  line-height: 1.5;
+  max-width: 640px;
 }
 
-.share-panel p,
-.import-panel p {
-  color: rgba(255, 255, 255, 0.65);
-  margin-bottom: 16px;
+.section-hint a {
+  color: #69b1ff;
+}
+
+.links-intro {
+  margin-bottom: 20px;
+}
+
+.links-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.link-card {
+  flex: 1 1 280px;
+  min-width: min(100%, 280px);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #1a1a1a;
+  border: 1px solid #353535;
+  border-radius: 10px;
+}
+
+.link-card--group {
+  flex: 1 1 360px;
+  min-width: min(100%, 320px);
+}
+
+.link-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.link-order {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #1677ff;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.link-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.link-desc {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+.link-input {
+  width: 100%;
+}
+
+.link-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.link-action-route {
+  text-decoration: none;
+}
+
+.link-subitems-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.link-subitem {
+  flex: 1 1 200px;
+  min-width: min(100%, 200px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .import-actions {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
+}
+
+.import-alert {
+  margin-top: 16px;
 }
 
 .error-list {

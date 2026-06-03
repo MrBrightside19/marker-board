@@ -2,7 +2,7 @@
   <div class="public-tournament" v-if="tournament">
     <header class="page-header">
       <div>
-        <router-link to="/" class="back-link">← Inicio</router-link>
+        <router-link to="/torneos-publicos" class="back-link">← Torneos públicos</router-link>
         <h1>
           {{ tournament.name }}
           <a-tag v-if="tournament.status === 'finished'" color="default">Finalizado</a-tag>
@@ -16,20 +16,23 @@
       </div>
     </header>
 
-    <section v-if="liveMatches.length > 0" class="live-section">
+    <section v-if="liveDisplayMatches.length > 0" class="live-section">
       <h2>En vivo ahora</h2>
       <a-row :gutter="[16, 16]">
-        <a-col v-for="match in liveMatches" :key="match.id" :xs="24" :sm="12" :lg="8">
+        <a-col v-for="match in liveDisplayMatches" :key="match.id" :xs="24" :sm="12" :lg="8">
           <a-card class="match-card" hoverable>
             <template #title>{{ match.localTeam }} vs {{ match.visitTeam }}</template>
             <template #extra><a-tag color="red">LIVE</a-tag></template>
             <div class="scoreline">
-              <span>{{ match.goalLocal ?? 0 }}</span>
+              <span>{{ match.goalLocal }}</span>
               <span class="sep">-</span>
-              <span>{{ match.goalVisit ?? 0 }}</span>
+              <span>{{ match.goalVisit }}</span>
             </div>
-            <p class="meta">Cancha {{ formatCourtLabel(match.court) }}</p>
-            <router-link v-if="match.matchId" :to="liveRoute(match.matchId)">
+            <p class="meta">
+              Cancha {{ formatCourtLabel(match.court) }}
+              <span v-if="match.timeGame"> · P{{ match.gamePeriod }} {{ match.timeGame }}</span>
+            </p>
+            <router-link v-if="match.matchId" :to="liveRouteFor(match.matchId)">
               <a-button type="primary" block>Ver marcador</a-button>
             </router-link>
           </a-card>
@@ -47,7 +50,7 @@
       <a-empty v-if="tournament.matches.length === 0" description="Aún no hay partidos programados" />
       <a-table
         v-else
-        :data-source="tournament.matches"
+        :data-source="calendarRows"
         :columns="columns"
         row-key="id"
         :pagination="{ pageSize: 20 }"
@@ -58,7 +61,13 @@
             {{ record.scheduledAt ? formatDateTime(record.scheduledAt) : "—" }}
           </template>
           <template v-else-if="column.key === 'result'">
-            <span v-if="record.goalLocal != null">{{ record.goalLocal }} - {{ record.goalVisit }}</span>
+            <span v-if="record.status === 'live' && record.matchId">
+              {{ liveScoreFor(record.matchId)?.goalLocal ?? record.goalLocal ?? 0 }}
+              -
+              {{ liveScoreFor(record.matchId)?.goalVisit ?? record.goalVisit ?? 0 }}
+              <a-tag color="red" class="live-tag">LIVE</a-tag>
+            </span>
+            <span v-else-if="record.goalLocal != null">{{ record.goalLocal }} - {{ record.goalVisit }}</span>
             <span v-else>—</span>
           </template>
           <template v-else-if="column.key === 'court'">
@@ -68,7 +77,7 @@
             <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <router-link v-if="record.status === 'live' && record.matchId" :to="liveRoute(record.matchId)">
+            <router-link v-if="record.status === 'live' && record.matchId" :to="liveRouteFor(record.matchId)">
               <a-button type="primary" size="small">Ver live</a-button>
             </router-link>
             <span v-else>—</span>
@@ -84,25 +93,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { message } from "ant-design-vue";
 import dayjs from "dayjs";
 import TournamentStandingsPanel from "../components/tournament/TournamentStandingsPanel.vue";
+import { useScheduledRefresh } from "../composables/useScheduledRefresh";
+import { fetchLiveScoresByMatchIds, type LiveScoreSnapshot } from "../services/matchSync";
 import { fetchTournamentWithMatches } from "../services/tournamentService";
 import type { TournamentMatch, TournamentWithMatches } from "../types/tournament";
 import { getSportById } from "../types/sport";
 import { formatCourtLabel } from "../utils/court";
-import { liveRoute as liveRouteUtil } from "../utils/routes";
+import { onLiveMatchesBump } from "../utils/liveMatchesSync";
+import { basketballLiveRoute, liveRoute as liveRouteUtil } from "../utils/routes";
 
 const route = useRoute();
 const tournament = ref<TournamentWithMatches | null>(null);
+const liveScores = ref<Record<string, LiveScoreSnapshot>>({});
+const pageLoading = ref(true);
+
+let stopLiveBump: (() => void) | null = null;
 
 const columns = [
   { title: "Local", dataIndex: "localTeam", key: "localTeam" },
   { title: "Visita", dataIndex: "visitTeam", key: "visitTeam" },
   { title: "Cancha", key: "court", width: 80, align: "center" as const },
-  { title: "Resultado", key: "result", width: 100, align: "center" as const },
+  { title: "Resultado", key: "result", width: 120, align: "center" as const },
   { title: "Programado", key: "scheduledAt", width: 160 },
   { title: "Estado", key: "status", width: 110 },
   { title: "", key: "actions", width: 110 },
@@ -111,6 +127,28 @@ const columns = [
 const liveMatches = computed(() =>
   (tournament.value?.matches ?? []).filter((m) => m.status === "live")
 );
+
+type LiveCardMatch = TournamentMatch & {
+  goalLocal: number;
+  goalVisit: number;
+  gamePeriod: number;
+  timeGame: string;
+};
+
+const liveDisplayMatches = computed((): LiveCardMatch[] =>
+  liveMatches.value.map((match) => {
+    const remote = match.matchId ? liveScores.value[match.matchId] : undefined;
+    return {
+      ...match,
+      goalLocal: remote?.goalLocal ?? match.goalLocal ?? 0,
+      goalVisit: remote?.goalVisit ?? match.goalVisit ?? 0,
+      gamePeriod: remote?.gamePeriod ?? 1,
+      timeGame: remote?.timeGame ?? match.timeGame,
+    };
+  })
+);
+
+const calendarRows = computed(() => tournament.value?.matches ?? []);
 
 const finishedMatchCount = computed(
   () =>
@@ -121,7 +159,14 @@ const finishedMatchCount = computed(
 
 const sportLabel = computed(() => getSportById(tournament.value?.sport)?.name ?? "Deporte");
 
-function liveRoute(matchId: string) {
+function liveScoreFor(matchId: string | null) {
+  if (!matchId) return undefined;
+  return liveScores.value[matchId];
+}
+
+function liveRouteFor(matchId: string) {
+  const sport = tournament.value?.sport;
+  if (sport === "basquet") return basketballLiveRoute(matchId);
   return liveRouteUtil(matchId);
 }
 
@@ -145,16 +190,85 @@ function statusColor(status: TournamentMatch["status"]) {
   return "blue";
 }
 
-onMounted(async () => {
+async function refreshLiveScores() {
+  const ids = liveMatches.value
+    .map((m) => m.matchId)
+    .filter((id): id is string => Boolean(id));
+  if (!ids.length) {
+    liveScores.value = {};
+    return;
+  }
+  liveScores.value = await fetchLiveScoresByMatchIds(ids);
+}
+
+async function loadTournamentData() {
   const id = route.params.id?.toString();
   if (!id) return;
 
-  tournament.value = await fetchTournamentWithMatches(id);
-  if (!tournament.value) {
+  const data = await fetchTournamentWithMatches(id);
+  if (!data) {
     message.error("Torneo no encontrado");
+    tournament.value = null;
     return;
   }
-  document.title = tournament.value.name;
+  tournament.value = data;
+  document.title = data.name;
+  await refreshLiveScores();
+}
+
+const scheduler = useScheduledRefresh({
+  loading: pageLoading,
+  isActive: () => route.name === "tournament-public" && Boolean(route.params.id),
+  load: async () => {
+    try {
+      await loadTournamentData();
+    } catch (error) {
+      console.error("[public-tournament] load", error);
+    }
+  },
+});
+
+function activatePage() {
+  scheduler.start();
+}
+
+watch(
+  () => route.params.id,
+  (id, prev) => {
+    if (route.name !== "tournament-public" || !id) return;
+    if (id !== prev) {
+      tournament.value = null;
+      liveScores.value = {};
+      activatePage();
+    }
+  }
+);
+
+watch(
+  () => route.name,
+  (name, prev) => {
+    if (name === "tournament-public" && prev !== "tournament-public") {
+      activatePage();
+    } else if (name !== "tournament-public") {
+      scheduler.stop();
+    }
+  }
+);
+
+onMounted(() => {
+  document.addEventListener("visibilitychange", scheduler.onVisibilityChange);
+  stopLiveBump = onLiveMatchesBump(() => scheduler.scheduleBumpRefresh());
+
+  if (route.name === "tournament-public" && route.params.id) {
+    activatePage();
+  }
+});
+
+onUnmounted(() => {
+  scheduler.stop();
+  stopLiveBump?.();
+  stopLiveBump = null;
+  document.removeEventListener("visibilitychange", scheduler.onVisibilityChange);
 });
 </script>
 
@@ -243,6 +357,11 @@ onMounted(async () => {
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
   margin: 0 0 12px;
+}
+
+.live-tag {
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 :deep(.ant-table) {

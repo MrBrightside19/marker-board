@@ -22,6 +22,8 @@ export function getSupabase(): SupabaseClient | null {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      storage: localStorage,
+      detectSessionInUrl: false,
     },
     global: {
       headers: {

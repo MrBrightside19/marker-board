@@ -12,10 +12,15 @@ import type {
 } from "../types/tournament";
 import { createMatchId } from "../utils/activeMatch";
 import { normalizeCourt } from "../utils/court";
+import { notifyLiveMatchesBump } from "../utils/liveMatchesSync";
 import { resolveSportId, type SportId } from "../types/sport";
+import { withTimeout } from "../utils/async";
 import { getSupabase } from "./supabaseClient";
-import { registerMatchRecord } from "./liveMatchesService";
+import { isSupabaseRestConfigured, restGetRows } from "./supabaseRest";
+import { registerMatchRecord, setMatchLiveStatus } from "./liveMatchesService";
 import { setTournamentCourtLiveMatch } from "./tournamentCourtStream";
+
+const TOURNAMENT_DB_TIMEOUT_MS = 18_000;
 
 type TournamentRow = {
   id: string;
@@ -156,6 +161,10 @@ export async function fetchTournamentsByOrganizer(
 export async function fetchTournamentWithMatches(
   tournamentId: string
 ): Promise<TournamentWithMatches | null> {
+  if (isSupabaseRestConfigured()) {
+    return fetchTournamentWithMatchesRest(tournamentId);
+  }
+
   const supabase = getSupabase();
   if (!supabase) return null;
 
@@ -183,8 +192,35 @@ export async function fetchTournamentWithMatches(
 
   return {
     ...mapTournament(tournament as TournamentRow),
-    matches: (matches as TournamentMatchRow[]).map(mapTournamentMatch),
+    matches: ((matches ?? []) as TournamentMatchRow[]).map(mapTournamentMatch),
   };
+}
+
+async function fetchTournamentWithMatchesRest(
+  tournamentId: string
+): Promise<TournamentWithMatches | null> {
+  try {
+    const tournaments = await restGetRows<TournamentRow>("tournaments", {
+      select: "*",
+      id: `eq.${tournamentId}`,
+    });
+    const tournament = tournaments[0];
+    if (!tournament) return null;
+
+    const matches = await restGetRows<TournamentMatchRow>("tournament_matches", {
+      select: "*",
+      tournament_id: `eq.${tournamentId}`,
+      order: "sort_order.asc",
+    });
+
+    return {
+      ...mapTournament(tournament),
+      matches: matches.map(mapTournamentMatch),
+    };
+  } catch (error) {
+    console.error("[tournaments] get REST", error);
+    return null;
+  }
 }
 
 export async function bulkImportTournamentMatches(
@@ -297,7 +333,7 @@ export async function fetchTournamentControlsContext(
 
   const { data: matchRow, error: matchError } = await supabase
     .from("matches")
-    .select("tournament_id, court")
+    .select("tournament_id")
     .eq("id", matchId)
     .maybeSingle();
 
@@ -306,7 +342,7 @@ export async function fetchTournamentControlsContext(
   }
 
   let tournamentId = (matchRow?.tournament_id as string | null) ?? null;
-  let courtHint = (matchRow?.court as string | null) ?? undefined;
+  let courtHint: string | undefined;
 
   if (!tournamentId) {
     const { data: tmRow } = await supabase
@@ -408,6 +444,10 @@ export async function finalizeTournament(tournamentId: string): Promise<Tourname
 export async function fetchActiveTournamentsWithResults(
   filters?: PublicHomeFilters
 ): Promise<ActiveTournamentSummary[]> {
+  if (isSupabaseRestConfigured()) {
+    return fetchActiveTournamentsWithResultsRest(filters);
+  }
+
   const supabase = getSupabase();
   if (!supabase) return [];
 
@@ -421,14 +461,16 @@ export async function fetchActiveTournamentsWithResults(
     query = query.eq("sport", filters.sportId);
   }
 
-  const { data: tournaments, error } = await query.order("start_date", { ascending: false });
+  const { data: tournaments, error } = await query.order("start_date", {
+    ascending: false,
+  });
 
   if (error || !tournaments?.length) {
     if (error) console.error("[tournaments] active", error.message);
     return [];
   }
 
-  const ids = tournaments.map((t) => t.id);
+  const ids = (tournaments as TournamentRow[]).map((t) => t.id);
   const { data: matches, error: matchesError } = await supabase
     .from("tournament_matches")
     .select("*")
@@ -440,14 +482,55 @@ export async function fetchActiveTournamentsWithResults(
     return [];
   }
 
+  return buildActiveTournamentSummaries(
+    tournaments as TournamentRow[],
+    (matches as TournamentMatchRow[]) ?? []
+  );
+}
+
+async function fetchActiveTournamentsWithResultsRest(
+  filters?: PublicHomeFilters
+): Promise<ActiveTournamentSummary[]> {
+  try {
+    const query: Record<string, string> = {
+      select: "*",
+      status: "eq.active",
+      visibility: "eq.public",
+      order: "start_date.desc",
+    };
+    if (filters?.sportId) {
+      query.sport = `eq.${filters.sportId}`;
+    }
+
+    const tournaments = await restGetRows<TournamentRow>("tournaments", query);
+    if (!tournaments.length) return [];
+
+    const ids = tournaments.map((t) => t.id);
+    const matches = await restGetRows<TournamentMatchRow>("tournament_matches", {
+      select: "*",
+      tournament_id: `in.(${ids.join(",")})`,
+      order: "finished_at.desc",
+    });
+
+    return buildActiveTournamentSummaries(tournaments, matches);
+  } catch (error) {
+    console.error("[tournaments] active REST", error);
+    return [];
+  }
+}
+
+function buildActiveTournamentSummaries(
+  tournaments: TournamentRow[],
+  matches: TournamentMatchRow[]
+): ActiveTournamentSummary[] {
   const matchesByTournament = new Map<string, TournamentMatchRow[]>();
-  for (const row of (matches as TournamentMatchRow[]) ?? []) {
+  for (const row of matches) {
     const list = matchesByTournament.get(row.tournament_id) ?? [];
     list.push(row);
     matchesByTournament.set(row.tournament_id, list);
   }
 
-  return (tournaments as TournamentRow[]).map((t) => {
+  return tournaments.map((t) => {
     const tMatches = matchesByTournament.get(t.id) ?? [];
     const mapped = tMatches.map(mapTournamentMatch);
     const tournament = mapTournament(t);
@@ -664,6 +747,68 @@ export async function startTournamentMatch(
   } catch (error) {
     console.error("[tournaments] court stream", error);
   }
+
+  notifyLiveMatchesBump(true);
+
+  return { matchId, tournamentId: matchRow.tournament_id, court };
+}
+
+/**
+ * Marca un partido del calendario como en juego sin reiniciar el marcador.
+ * Necesario al reabrir Marcador TV cuando ya existe match_id en Supabase.
+ */
+export async function markTournamentMatchLive(
+  tournamentMatchId: string,
+  _organizerId: string
+): Promise<{ matchId: string; tournamentId: string; court: string }> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase no configurado");
+
+  const { data: row, error } = await supabase
+    .from("tournament_matches")
+    .select("*")
+    .eq("id", tournamentMatchId)
+    .maybeSingle();
+
+  if (error || !row) {
+    throw new Error(error?.message || "Partido no encontrado");
+  }
+
+  const matchRow = row as TournamentMatchRow;
+  if (matchRow.status === "finished") {
+    throw new Error("El partido ya está finalizado");
+  }
+
+  const matchId = matchRow.match_id?.trim();
+  if (!matchId) {
+    throw new Error("El partido aún no tiene marcador; usa «Marcador TV» para iniciarlo");
+  }
+
+  const court = normalizeCourt(matchRow.court ?? "1");
+
+  if (matchRow.status !== "live") {
+    const { error: updateError } = await supabase
+      .from("tournament_matches")
+      .update({ status: "live", match_id: matchId })
+      .eq("id", tournamentMatchId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  }
+
+  await withTimeout(
+    setTournamentCourtLiveMatch(matchRow.tournament_id, court, matchId),
+    TOURNAMENT_DB_TIMEOUT_MS,
+    "No se pudo actualizar la transmisión de la cancha"
+  );
+  await withTimeout(
+    setMatchLiveStatus(matchId, true),
+    TOURNAMENT_DB_TIMEOUT_MS,
+    "No se pudo marcar el partido como en vivo"
+  );
+
+  notifyLiveMatchesBump(true);
 
   return { matchId, tournamentId: matchRow.tournament_id, court };
 }

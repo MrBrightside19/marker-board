@@ -18,14 +18,14 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { message } from "ant-design-vue";
 import LiveMatchesCarousel from "../components/home/LiveMatchesCarousel.vue";
-import { useAuthStore } from "../stores/auth";
+import { useScheduledRefresh } from "../composables/useScheduledRefresh";
 import { useSelectedSportStore } from "../stores/selectedSport";
 import { fetchLiveMatches } from "../services/liveMatchesService";
 import { isSupabaseConfigured } from "../services/supabaseClient";
 import type { LiveMatchSummary } from "../types/liveMatch";
+import { onLiveMatchesBump } from "../utils/liveMatchesSync";
 
 const route = useRoute();
-const auth = useAuthStore();
 const selectedSport = useSelectedSportStore();
 
 const remoteEnabled = isSupabaseConfigured();
@@ -34,42 +34,67 @@ const loadingHome = ref(false);
 const nowMs = ref(Date.now());
 
 let refreshInterval: number | null = null;
-let matchesPollInterval: number | null = null;
+let stopLiveBump: (() => void) | null = null;
 
-async function loadLiveMatches() {
-  if (!remoteEnabled) return;
-  loadingHome.value = true;
-  try {
-    liveMatches.value = await fetchLiveMatches({
-      sportId: selectedSport.sportId,
-      publicTournamentsOnly: true,
-    });
-  } finally {
-    loadingHome.value = false;
-  }
+const scheduler = useScheduledRefresh({
+  loading: loadingHome,
+  isActive: () => route.name === "home",
+  load: async () => {
+    if (!remoteEnabled) return;
+    try {
+      liveMatches.value = await fetchLiveMatches({
+        sportId: selectedSport.sportId,
+        publicTournamentsOnly: true,
+      });
+    } catch (error) {
+      console.error("[home] live matches", error);
+      message.error(error instanceof Error ? error.message : "No se pudo cargar en vivo");
+    }
+  },
+});
+
+function activateHome() {
+  selectedSport.syncFromQuery(route.query.deporte?.toString());
+  scheduler.start();
 }
 
-onMounted(async () => {
+onMounted(() => {
   document.title = "Marcador Deportivo";
-  selectedSport.syncFromQuery(route.query.deporte?.toString());
-
-  await auth.init();
-  await loadLiveMatches();
-
-  if (route.query.error === "organizer-only") {
-    message.warning("Solo los organizadores pueden acceder a la mesa de control.");
-  }
 
   refreshInterval = window.setInterval(() => {
     nowMs.value = Date.now();
   }, 1000);
 
-  matchesPollInterval = window.setInterval(loadLiveMatches, 15000);
+  document.addEventListener("visibilitychange", scheduler.onVisibilityChange);
+  stopLiveBump = onLiveMatchesBump(() => scheduler.scheduleBumpRefresh());
+
+  if (route.name === "home") {
+    activateHome();
+  }
+
+  if (route.query.error === "organizer-only") {
+    message.warning("Solo los organizadores pueden acceder a la mesa de control.");
+  }
 });
 
 watch(
+  () => route.name,
+  (name, prev) => {
+    if (name === "home" && prev !== "home") {
+      activateHome();
+    } else if (name !== "home") {
+      scheduler.stop();
+    }
+  }
+);
+
+watch(
   () => selectedSport.sportId,
-  () => void loadLiveMatches()
+  () => {
+    if (route.name === "home") {
+      scheduler.refresh({ showSpinner: liveMatches.value.length === 0, force: true });
+    }
+  }
 );
 
 watch(
@@ -80,8 +105,11 @@ watch(
 );
 
 onUnmounted(() => {
+  scheduler.stop();
+  stopLiveBump?.();
+  stopLiveBump = null;
   if (refreshInterval) window.clearInterval(refreshInterval);
-  if (matchesPollInterval) window.clearInterval(matchesPollInterval);
+  document.removeEventListener("visibilitychange", scheduler.onVisibilityChange);
 });
 </script>
 

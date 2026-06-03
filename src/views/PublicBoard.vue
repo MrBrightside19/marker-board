@@ -79,8 +79,8 @@ const {
 .public-board {
   width: 100vw;
   height: 100vh;
-  background: #000;
-  color: #fff;
+  background: var(--scoreboard-bg, #000);
+  color: var(--scoreboard-fg, #fff);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -1,3 +1,5 @@
+import { readUserPreferences } from "../services/userPreferencesStorage";
+
 export const GAME_TIME_ENDED_EVENT = "game-time-ended";
 
 let lastAlertMs = 0;
@@ -10,7 +12,9 @@ export function resetGameTimeAlertCooldown(): void {
   lastCountdownBeepMs = 0;
 }
 
-const COUNTDOWN_WINDOW_MS = 5000;
+function getCountdownWindowMs(): number {
+  return readUserPreferences().countdownSoundFromSeconds * 1000;
+}
 
 function playTone(frequency: number, duration: number, volume = 0.12): void {
   const ctx = new AudioContext();
@@ -26,7 +30,7 @@ function playTone(frequency: number, duration: number, volume = 0.12): void {
   window.setTimeout(() => void ctx.close(), duration * 1000 + 80);
 }
 
-/** Pitido corto (5, 4, 3, 2, 1 segundos restantes) */
+/** Pitido corto (cuenta regresiva configurable) */
 export function playCountdownTick(): void {
   const now = Date.now();
   if (now - lastCountdownBeepMs < COUNTDOWN_BEEP_COOLDOWN_MS) return;
@@ -62,7 +66,7 @@ export function playGameTimeEndSound(): void {
   }
 }
 
-/** Pitidos en los últimos 5 s y aviso final al llegar a 00:00 */
+/** Pitidos en la ventana configurada y aviso final al llegar a 00:00 */
 export function handleGameTimeTick(
   previousMs: number,
   nextMs: number,
@@ -70,7 +74,9 @@ export function handleGameTimeTick(
 ): void {
   if (isPaused) return;
 
-  if (nextMs > 0 && nextMs <= COUNTDOWN_WINDOW_MS && previousMs > nextMs) {
+  const windowMs = getCountdownWindowMs();
+
+  if (nextMs > 0 && nextMs <= windowMs && previousMs > nextMs) {
     playCountdownTick();
   }
 
