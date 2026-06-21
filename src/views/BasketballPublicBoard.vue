@@ -48,6 +48,9 @@ import { getPollIntervalMs } from "../config/sync";
 import { getBasketballRunningClock } from "../utils/basketballClock";
 import { GAME_TIME_ENDED_EVENT, handleGameTimeTick } from "../utils/gameTimeAlert";
 import { parseTimeToMs } from "../utils/scoreboardClock";
+import { useBroadcastPage } from "../composables/useBroadcastPage";
+
+useBroadcastPage("live");
 
 const route = useRoute();
 const snapshot = ref<BasketballScoreboardState>({ ...DEFAULT_BASKETBALL_STATE });

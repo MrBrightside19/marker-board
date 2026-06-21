@@ -66,7 +66,10 @@
 
 <script setup lang="ts">
 import LiveSyncStatus from "../components/LiveSyncStatus.vue";
+import { useBroadcastPage } from "../composables/useBroadcastPage";
 import { useTournamentCourtBoard } from "../composables/useTournamentCourtBoard";
+
+useBroadcastPage("live");
 
 const {
   tournamentId,
@@ -137,6 +140,16 @@ const {
 
 .team-panel {
   text-align: center;
+}
+
+.team-name,
+.team-score,
+.clock,
+.meta-label,
+.meta-value,
+.status-message,
+.status-sub {
+  color: #fff;
 }
 
 .team-name {

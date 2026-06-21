@@ -14,26 +14,37 @@ import AppNav from "./components/layout/AppNav.vue";
 import { getResolvedAppTheme } from "./services/userPreferencesStorage";
 import { useUserPreferencesStore } from "./stores/userPreferences";
 
+const BROADCAST_ROUTE_NAMES = new Set([
+  "board",
+  "controls",
+  "live",
+  "tournament-live",
+  "overlay",
+  "tournament-overlay",
+  "basketball-board",
+  "basketball-controls",
+  "basketball-live",
+]);
+
 const route = useRoute();
 const navRef = ref<InstanceType<typeof AppNav> | null>(null);
 const prefsStore = useUserPreferencesStore();
 
 const showMainNav = computed(() => {
   const name = route.name?.toString() ?? "";
-  return ![
-    "board",
-    "controls",
-    "live",
-    "tournament-live",
-    "overlay",
-    "tournament-overlay",
-    "basketball-board",
-    "basketball-controls",
-    "basketball-live",
-  ].includes(name);
+  return !BROADCAST_ROUTE_NAMES.has(name);
 });
 
+const isBroadcastRoute = computed(() => {
+  const name = route.name?.toString() ?? "";
+  return BROADCAST_ROUTE_NAMES.has(name);
+});
+
+/** En live/overlay/board no aplicar tema oscuro de Ant Design (evita texto claro sobre fondo blanco). */
 const antdTheme = computed(() => {
+  if (isBroadcastRoute.value) {
+    return { algorithm: theme.defaultAlgorithm };
+  }
   const resolved = getResolvedAppTheme(prefsStore.prefs);
   return {
     algorithm: resolved === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm,

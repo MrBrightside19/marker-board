@@ -44,6 +44,7 @@ import {
 import { getPollIntervalMs } from "../../config/sync";
 import { resolveActiveMatchId, setActiveMatchId } from "../../utils/activeMatch";
 import OperatorCloseGuardBanner from "../OperatorCloseGuardBanner.vue";
+import { useBroadcastPage } from "../../composables/useBroadcastPage";
 import { useOperatorCloseGuard } from "../../composables/useOperatorCloseGuard";
 import { getBasketballRunningClock } from "../../utils/basketballClock";
 import {
@@ -65,6 +66,8 @@ const showTimeEndedAlert = ref(false);
 const pollIntervalMs = getPollIntervalMs();
 
 const { needsArmClick, armNow } = useOperatorCloseGuard();
+
+useBroadcastPage("scoreboard");
 
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;

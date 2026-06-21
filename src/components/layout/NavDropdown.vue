@@ -104,13 +104,13 @@ function onSelect(item: NavDropdownItem) {
 
 <style scoped>
 .nav-dropdown-trigger {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--app-nav-text, rgba(255, 255, 255, 0.78));
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--app-nav-link-bg, rgba(255, 255, 255, 0.04));
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -125,9 +125,9 @@ function onSelect(item: NavDropdownItem) {
 }
 
 .nav-dropdown-trigger:hover:not(:disabled) {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--app-nav-text-hover, #fff);
+  background: var(--app-nav-link-bg-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--app-nav-link-border-hover, rgba(255, 255, 255, 0.12));
 }
 
 .nav-dropdown-trigger.active {
@@ -171,12 +171,10 @@ function onSelect(item: NavDropdownItem) {
   min-width: 220px;
   max-width: min(320px, 92vw);
   padding: 8px;
-  background: #1a1a1a;
-  border: 1px solid #353535;
+  background: var(--app-nav-dropdown-bg, #1a1a1a);
+  border: 1px solid var(--app-nav-dropdown-border, #353535);
   border-radius: 12px;
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  box-shadow: var(--app-nav-dropdown-shadow, 0 12px 32px rgba(0, 0, 0, 0.55));
 }
 
 .panel-title {
@@ -186,13 +184,18 @@ function onSelect(item: NavDropdownItem) {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--app-nav-dropdown-title, rgba(255, 255, 255, 0.4));
 }
 
 .panel-divider {
   height: 1px;
   margin: 6px 8px;
-  background: linear-gradient(90deg, transparent, #404040, transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--app-nav-dropdown-divider, #404040),
+    transparent
+  );
 }
 
 .panel-item {
@@ -204,7 +207,7 @@ function onSelect(item: NavDropdownItem) {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--app-nav-dropdown-text, rgba(255, 255, 255, 0.88));
   text-align: left;
   cursor: pointer;
   font-family: inherit;
@@ -212,7 +215,7 @@ function onSelect(item: NavDropdownItem) {
 }
 
 .panel-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--app-nav-dropdown-hover-bg, rgba(255, 255, 255, 0.08));
 }
 
 .panel-item.active {
@@ -261,7 +264,7 @@ function onSelect(item: NavDropdownItem) {
 
 .item-desc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--app-nav-dropdown-desc, rgba(255, 255, 255, 0.45));
   line-height: 1.3;
 }
 

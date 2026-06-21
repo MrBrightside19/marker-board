@@ -59,6 +59,7 @@ import {
   setActiveMatchId,
 } from "../utils/activeMatch";
 import OperatorCloseGuardBanner from "./OperatorCloseGuardBanner.vue";
+import { useBroadcastPage } from "../composables/useBroadcastPage";
 import { useOperatorCloseGuard } from "../composables/useOperatorCloseGuard";
 import {
   isControlsActiveWriter,
@@ -77,6 +78,8 @@ const scoreboardStore = useScoreboardStore();
 const activeMatchId = ref("");
 const remoteSyncEnabled = isRemoteSyncEnabled();
 const { needsArmClick, armNow } = useOperatorCloseGuard();
+
+useBroadcastPage("scoreboard");
 
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;
@@ -411,13 +414,14 @@ watch(penaltyMilliseconds, (newVal) => {
   display: block;
   line-height: 1.05;
   margin-bottom: clamp(8px, 3.5cqh, 50px);
-
+  color: var(--scoreboard-fg, #fff);
 }
 
 
 .score {
   font-size: clamp(70px, 39.5cqh, 760px);
   line-height: 0.9;
+  color: var(--scoreboard-fg, #fff);
 }
 
 .game-info {
@@ -434,6 +438,7 @@ watch(penaltyMilliseconds, (newVal) => {
 .time {
   font-size: clamp(64px, 34.5cqh, 700px);
   line-height: 0.9;
+  color: var(--scoreboard-fg, #fff);
 }
 
 .time.time-ended {
@@ -459,6 +464,7 @@ watch(penaltyMilliseconds, (newVal) => {
 .label {
   font-size: clamp(14px, 6.25cqh, 130px);
   line-height: 1;
+  color: var(--scoreboard-fg, #fff);
 }
 
 .period-container .label {
@@ -473,6 +479,7 @@ watch(penaltyMilliseconds, (newVal) => {
 .penalty {
   font-size: clamp(24px, 13.9cqh, 340px);
   line-height: 0.95;
+  color: var(--scoreboard-fg, #fff);
 }
 
 .play-status-bar {

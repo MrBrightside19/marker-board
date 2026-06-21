@@ -1178,7 +1178,8 @@ watch(visit, updateVisitlTeam);
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: #fff;
+  background: var(--controls-page-bg, #fff);
+  color: var(--controls-text, #141414);
 }
 
 .controls-panel {
@@ -1201,20 +1202,21 @@ watch(visit, updateVisitlTeam);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-top: 4px solid #000;
+  border-top: 4px solid var(--controls-separator, #000);
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--controls-panel-muted-bg, #fafafa);
 }
 
 .upcoming-title {
   margin: 0 0 8px;
   font-size: 15px;
   font-weight: 600;
+  color: var(--controls-text, #141414);
 }
 
 .upcoming-count {
   font-weight: 400;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--controls-text-muted, rgba(0, 0, 0, 0.45));
 }
 
 .controls-toolbar {
@@ -1223,9 +1225,10 @@ watch(visit, updateVisitlTeam);
   justify-content: space-between;
   gap: 8px;
   padding: 4px 6px;
-  background: #f5f5f5;
+  background: var(--controls-toolbar-bg, #f5f5f5);
   border-radius: 6px;
   font-size: 12px;
+  color: var(--controls-text, #141414);
 }
 
 .match-panel-info {
@@ -1241,7 +1244,7 @@ watch(visit, updateVisitlTeam);
 }
 
 .live-link--muted {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--controls-text-muted, rgba(0, 0, 0, 0.45));
   font-size: 12px;
 }
 
@@ -1271,6 +1274,7 @@ watch(visit, updateVisitlTeam);
 .team-label {
   font-size: 13px;
   font-weight: 600;
+  color: var(--controls-text, #141414);
 }
 
 .team-name-input {

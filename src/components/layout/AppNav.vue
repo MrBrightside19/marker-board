@@ -316,7 +316,7 @@ defineExpose({
 }
 
 .nav-brand {
-  color: #fff;
+  color: var(--app-nav-brand, #fff);
   font-weight: 700;
   font-size: 15px;
   text-decoration: none;
@@ -325,7 +325,7 @@ defineExpose({
 }
 
 .nav-brand:hover {
-  color: #69b1ff;
+  color: var(--app-nav-brand-hover, #69b1ff);
 }
 
 .nav-center {
@@ -345,14 +345,14 @@ defineExpose({
 }
 
 .nav-link {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--app-nav-text, rgba(255, 255, 255, 0.78));
   text-decoration: none;
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--app-nav-link-bg, rgba(255, 255, 255, 0.04));
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -366,9 +366,9 @@ defineExpose({
 }
 
 .nav-link:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--app-nav-text-hover, #fff);
+  background: var(--app-nav-link-bg-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--app-nav-link-border-hover, rgba(255, 255, 255, 0.12));
 }
 
 .nav-link.active {
