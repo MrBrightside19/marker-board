@@ -67,7 +67,7 @@ const pollIntervalMs = getPollIntervalMs();
 
 const { needsArmClick, armNow } = useOperatorCloseGuard();
 
-useBroadcastPage("scoreboard");
+useBroadcastPage();
 
 let pollInterval: number | null = null;
 let displayInterval: number | null = null;

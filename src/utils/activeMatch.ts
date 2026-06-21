@@ -1,4 +1,10 @@
-import { normalizeCourt } from "./court";
+import {
+  basketballLiveRoute,
+  liveRoute,
+  overlayRoute,
+  tournamentLiveRoute,
+  tournamentOverlayRoute,
+} from "./routes";
 
 export const ACTIVE_MATCH_STORAGE_KEY = "active-match-id";
 export const ACTIVE_TOURNAMENT_STORAGE_KEY = "active-tournament-id";
@@ -54,41 +60,37 @@ export function clearActiveTournamentSession(): void {
   setActiveCourt(null);
 }
 
-function buildAppUrl(pathSegment: string): string {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const path = `${base}${pathSegment}`.replace(/^\/\//, "/");
-  return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
+function buildAppUrl(path: string): string {
+  const base = import.meta.env.BASE_URL.endsWith("/")
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`;
+  const segment = path.replace(/^\//, "");
+  return new URL(`${base}${segment}`, window.location.origin).href;
 }
 
 /** Live publico de un partido suelto (sin torneo). */
 export function getPublicLiveUrl(matchId: string): string {
-  return buildAppUrl(`/live/${encodeURIComponent(matchId)}`);
+  return buildAppUrl(liveRoute(matchId).path);
 }
 
 /** Overlay (misma sync remota que el live). */
 export function getOverlayUrl(matchId: string): string {
-  return buildAppUrl(`/overlay/${encodeURIComponent(matchId)}`);
+  return buildAppUrl(overlayRoute(matchId).path);
 }
 
 /** Live publico de básquet. */
 export function getBasketballPublicLiveUrl(matchId: string): string {
-  return buildAppUrl(`/basquet/live/${matchId}`);
+  return buildAppUrl(basketballLiveRoute(matchId).path);
 }
 
 /** Live público fijo por cancha del torneo (misma URL para todos los partidos de esa cancha). */
 export function getTournamentLiveUrl(tournamentId: string, court = "1"): string {
-  const courtSlug = normalizeCourt(court);
-  return buildAppUrl(
-    `/live/torneo/${encodeURIComponent(tournamentId)}/${encodeURIComponent(courtSlug)}`
-  );
+  return buildAppUrl(tournamentLiveRoute(tournamentId, court).path);
 }
 
 /** Overlay fijo por cancha del torneo (OBS: configurar una sola vez). */
 export function getTournamentOverlayUrl(tournamentId: string, court = "1"): string {
-  const courtSlug = normalizeCourt(court);
-  return buildAppUrl(
-    `/overlay/torneo/${encodeURIComponent(tournamentId)}/${encodeURIComponent(courtSlug)}`
-  );
+  return buildAppUrl(tournamentOverlayRoute(tournamentId, court).path);
 }
 
 export function getActiveCourt(): string | null {

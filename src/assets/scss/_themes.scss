@@ -60,7 +60,8 @@
   --controls-text: #141414;
 }
 
-body {
+// No aplicar en live/overlay: esas vistas fijan su propio fondo y color
+html:not([data-broadcast-frameless="true"]):not(.overlay-page):not(.broadcast-scoreboard-page) body {
   background: var(--app-shell-bg);
   color: var(--app-shell-text);
 }

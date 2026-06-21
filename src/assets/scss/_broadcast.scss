@@ -1,29 +1,9 @@
-// Live público — siempre fondo negro y texto blanco (independiente del tema de la app)
-html.broadcast-live-page,
-html.broadcast-live-page body,
-html.broadcast-live-page #app {
-  background: #000 !important;
-  color: #fff !important;
-  margin: 0;
-  min-height: 100%;
-}
-
 // Marcador TV del operador — respeta esquema de marcador del perfil
 html.broadcast-scoreboard-page,
 html.broadcast-scoreboard-page body,
 html.broadcast-scoreboard-page #app {
   background: var(--scoreboard-bg, #000) !important;
   color: var(--scoreboard-fg, #fff) !important;
-  margin: 0;
-  min-height: 100%;
-}
-
-// Overlay OBS — fondo transparente; la pastilla lleva su propio fondo oscuro
-html.broadcast-overlay-page,
-html.broadcast-overlay-page body,
-html.broadcast-overlay-page #app {
-  background: transparent !important;
-  color: #fff !important;
   margin: 0;
   min-height: 100%;
 }

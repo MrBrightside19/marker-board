@@ -23,13 +23,8 @@
           route = '/' + route;
         }
         
-        // Store the route to redirect to
-        if (route !== '/') {
-          sessionStorage.setItem('404-redirect', route);
-        }
-        
-        // Redirect to index.html
-        window.location.replace('/marker-board/');
+        // Redirigir con query (cada pestaña conserva su destino; evita carreras en sessionStorage)
+        window.location.replace('/marker-board/?r=' + encodeURIComponent(route));
       })();
     </script>
   </head>

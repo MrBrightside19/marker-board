@@ -91,10 +91,16 @@ export function getResolvedAppTheme(prefs: UserPreferences): "dark" | "light" {
 
 export function applyUserPreferencesToDocument(prefs = readUserPreferences()): void {
   const normalized = normalizeUserPreferences(prefs);
-  const resolvedTheme = getResolvedAppTheme(normalized);
+  const frameless =
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.broadcastFrameless === "true";
 
-  document.documentElement.dataset.appTheme = resolvedTheme;
-  document.documentElement.dataset.appThemePreference = normalized.appTheme;
+  if (!frameless) {
+    const resolvedTheme = getResolvedAppTheme(normalized);
+    document.documentElement.dataset.appTheme = resolvedTheme;
+    document.documentElement.dataset.appThemePreference = normalized.appTheme;
+  }
+
   document.documentElement.dataset.scoreboardScheme = normalized.scoreboardScheme;
 
   const darkBoard = normalized.scoreboardScheme === "dark";

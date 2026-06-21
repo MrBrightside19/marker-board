@@ -13,35 +13,51 @@
             </span>
           </span>
           <span v-else><strong>Partido:</strong> {{ activeMatchId }}</span>
-          <a
-            class="live-link"
-            :href="broadcastLiveUrl"
-            target="_blank"
-            rel="noopener"
-            :title="isTournamentMode ? 'URL fija de transmisión (no cambia entre partidos)' : ''"
-          >
-            {{ isTournamentMode ? "Live (transmisión)" : "Live" }}
-          </a>
-          <a
-            class="live-link"
-            :href="broadcastOverlayUrl"
-            target="_blank"
-            rel="noopener"
-            :title="isTournamentMode ? 'URL fija para OBS' : ''"
-          >
-            {{ isTournamentMode ? "Overlay (OBS)" : "Overlay" }}
-          </a>
-          <a-button size="small" @click="copyOverlayUrl">Copiar overlay</a-button>
-          <a
-            v-if="isTournamentMode && perMatchLiveUrl"
-            class="live-link live-link--muted"
-            :href="perMatchLiveUrl"
-            target="_blank"
-            rel="noopener"
-            title="Enlace directo al partido actual"
-          >
-            Live partido
-          </a>
+          <div class="broadcast-links">
+            <div class="broadcast-links-group">
+              <span class="broadcast-links-label">Este partido:</span>
+              <a
+                class="live-link"
+                :href="perMatchLiveHref"
+                target="_blank"
+                rel="noopener"
+                title="Marcador en vivo del partido actual"
+              >
+                Live
+              </a>
+              <a
+                class="live-link"
+                :href="perMatchOverlayHref"
+                target="_blank"
+                rel="noopener"
+                title="Overlay del partido actual (OBS / navegador)"
+              >
+                Overlay
+              </a>
+              <a-button size="small" @click="copyOverlayUrl">Copiar overlay</a-button>
+            </div>
+            <div v-if="isTournamentMode" class="broadcast-links-group broadcast-links-group--fixed">
+              <span class="broadcast-links-label">URL fija cancha (OBS):</span>
+              <a
+                class="live-link live-link--muted"
+                :href="tournamentLiveHref"
+                target="_blank"
+                rel="noopener"
+                title="No cambia entre partidos de esta cancha"
+              >
+                Live
+              </a>
+              <a
+                class="live-link live-link--muted"
+                :href="tournamentOverlayHref"
+                target="_blank"
+                rel="noopener"
+                title="Configurar una sola vez en OBS para toda la cancha"
+              >
+                Overlay
+              </a>
+            </div>
+          </div>
         </div>
         <a-button
           type="primary"
@@ -247,15 +263,17 @@ import { setMatchLiveStatus } from "../services/liveMatchesService";
 import {
   createMatchId,
   clearActiveTournamentSession,
-  getPublicLiveUrl,
-  getOverlayUrl,
-  getTournamentLiveUrl,
-  getTournamentOverlayUrl,
   resolveActiveMatchId,
   setActiveCourt,
   setActiveMatchId,
   setActiveTournamentId,
 } from "../utils/activeMatch";
+import {
+  liveRoute,
+  overlayRoute,
+  tournamentLiveRoute,
+  tournamentOverlayRoute,
+} from "../utils/routes";
 import { formatCourtLabel } from "../utils/court";
 import {
   GAME_TIME_ENDED_EVENT,
@@ -333,30 +351,36 @@ const startingMatchId = ref<string | null>(null);
 
 const TOURNAMENT_OP_TIMEOUT_MS = 25_000;
 
-const perMatchLiveUrl = computed(() =>
-  activeMatchId.value ? getPublicLiveUrl(activeMatchId.value) : ""
+const perMatchLiveHref = computed(() =>
+  activeMatchId.value ? router.resolve(liveRoute(activeMatchId.value)).href : ""
+);
+
+const perMatchOverlayHref = computed(() =>
+  activeMatchId.value ? router.resolve(overlayRoute(activeMatchId.value)).href : ""
 );
 
 const perMatchOverlayUrl = computed(() =>
-  activeMatchId.value ? getOverlayUrl(activeMatchId.value) : ""
+  perMatchOverlayHref.value
+    ? `${window.location.origin}${perMatchOverlayHref.value}`
+    : ""
 );
 
-const broadcastLiveUrl = computed(() => {
+const tournamentLiveHref = computed(() => {
   const ctx = tournamentContext.value;
-  if (ctx) return getTournamentLiveUrl(ctx.tournament.id, ctx.court);
-  return perMatchLiveUrl.value;
+  if (!ctx) return "";
+  return router.resolve(tournamentLiveRoute(ctx.tournament.id, ctx.court)).href;
 });
 
-const broadcastOverlayUrl = computed(() => {
+const tournamentOverlayHref = computed(() => {
   const ctx = tournamentContext.value;
-  if (ctx) return getTournamentOverlayUrl(ctx.tournament.id, ctx.court);
-  return perMatchOverlayUrl.value;
+  if (!ctx) return "";
+  return router.resolve(tournamentOverlayRoute(ctx.tournament.id, ctx.court)).href;
 });
 
 async function copyOverlayUrl() {
-  if (!broadcastOverlayUrl.value) return;
+  if (!perMatchOverlayUrl.value) return;
   try {
-    await navigator.clipboard.writeText(broadcastOverlayUrl.value);
+    await navigator.clipboard.writeText(perMatchOverlayUrl.value);
     message.success("URL del overlay copiada");
   } catch {
     message.error("No se pudo copiar la URL");
@@ -1241,6 +1265,33 @@ watch(visit, updateVisitlTeam);
 
 .live-link {
   color: #1677ff;
+}
+
+.broadcast-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.broadcast-links-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.broadcast-links-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--controls-text-muted, rgba(0, 0, 0, 0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.broadcast-links-group--fixed {
+  padding-top: 2px;
+  border-top: 1px dashed var(--controls-separator, rgba(0, 0, 0, 0.12));
 }
 
 .live-link--muted {

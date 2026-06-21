@@ -67,11 +67,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { useBroadcastPage } from "../composables/useBroadcastPage";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useTournamentCourtBoard } from "../composables/useTournamentCourtBoard";
-
-useBroadcastPage("overlay");
 
 const {
   tournamentId,
@@ -127,11 +124,18 @@ const powerPlayLabel = computed(() => {
   if (showThreeOnThree.value) return "3c3";
   return "POWER PLAY";
 });
+
+onMounted(() => {
+  document.documentElement.classList.add("overlay-page");
+});
+
+onUnmounted(() => {
+  document.documentElement.classList.remove("overlay-page");
+});
 </script>
 
 <style scoped lang="scss">
-$overlay-bg: #1a1a1a;
-$overlay-bg-muted: #141414;
+$overlay-bg: rgba(0, 0, 0, 0.7);
 
 .overlay-root {
   min-height: 100vh;
@@ -252,7 +256,6 @@ $overlay-bg-muted: #141414;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
@@ -264,7 +267,6 @@ $overlay-bg-muted: #141414;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: #fff;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
 }
 
@@ -284,7 +286,7 @@ $overlay-bg-muted: #141414;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #fff;
-  background: $overlay-bg-muted;
+  background: rgba(0, 0, 0, 0.45);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -336,12 +338,6 @@ $overlay-bg-muted: #141414;
   }
 }
 
-.period-tag,
-.clock-separator,
-.game-time {
-  color: #fff;
-}
-
 .period-tag {
   font-size: clamp(16px, 2vw, 20px);
   font-weight: 700;
@@ -364,5 +360,15 @@ $overlay-bg-muted: #141414;
   font-family: "DS-DIGIT", "Roboto Condensed", sans-serif;
   letter-spacing: 0.03em;
   line-height: 1;
+}
+</style>
+
+<style>
+html.overlay-page,
+html.overlay-page body,
+html.overlay-page #app {
+  background: transparent !important;
+  margin: 0;
+  min-height: 100%;
 }
 </style>

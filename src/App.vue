@@ -1,7 +1,7 @@
 <template>
-  <ConfigProvider :theme="antdTheme">
+  <ConfigProvider v-bind="configProviderAttrs">
     <AppNav v-if="showMainNav" ref="navRef" @auth-success="onAuthSuccess" />
-    <RouterView :key="route.fullPath" />
+    <RouterView />
   </ConfigProvider>
 </template>
 
@@ -13,18 +13,7 @@ import { ConfigProvider } from "ant-design-vue";
 import AppNav from "./components/layout/AppNav.vue";
 import { getResolvedAppTheme } from "./services/userPreferencesStorage";
 import { useUserPreferencesStore } from "./stores/userPreferences";
-
-const BROADCAST_ROUTE_NAMES = new Set([
-  "board",
-  "controls",
-  "live",
-  "tournament-live",
-  "overlay",
-  "tournament-overlay",
-  "basketball-board",
-  "basketball-controls",
-  "basketball-live",
-]);
+import { BROADCAST_ROUTE_NAMES } from "./utils/broadcastRoutes";
 
 const route = useRoute();
 const navRef = ref<InstanceType<typeof AppNav> | null>(null);
@@ -35,19 +24,14 @@ const showMainNav = computed(() => {
   return !BROADCAST_ROUTE_NAMES.has(name);
 });
 
-const isBroadcastRoute = computed(() => {
-  const name = route.name?.toString() ?? "";
-  return BROADCAST_ROUTE_NAMES.has(name);
-});
-
-/** En live/overlay/board no aplicar tema oscuro de Ant Design (evita texto claro sobre fondo blanco). */
-const antdTheme = computed(() => {
-  if (isBroadcastRoute.value) {
-    return { algorithm: theme.defaultAlgorithm };
-  }
+/** Live/overlay/board: ConfigProvider sin :theme (igual que 6368e90). */
+const configProviderAttrs = computed(() => {
+  if (!showMainNav.value) return {};
   const resolved = getResolvedAppTheme(prefsStore.prefs);
   return {
-    algorithm: resolved === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    theme: {
+      algorithm: resolved === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    },
   };
 });
 
@@ -61,10 +45,21 @@ function onAuthSuccess() {
   /* La sesión ya está en Pinia; no recargar la página (evita perder sesión por carreras en init). */
 }
 
+function hydrateThemeIfNeeded() {
+  if (showMainNav.value) {
+    prefsStore.hydrate();
+  }
+}
+
 onMounted(() => {
-  prefsStore.hydrate();
+  hydrateThemeIfNeeded();
   openAuthFromQuery();
 });
+
+watch(
+  () => route.name,
+  () => hydrateThemeIfNeeded()
+);
 
 watch(
   () => route.query.login,

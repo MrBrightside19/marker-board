@@ -44,8 +44,11 @@
       </a-form>
     </a-card>
 
-    <a-card title="Marcadores (TV, live y overlay)" class="settings-card">
-      <p class="card-hint">Esquema de color del fondo y números en las pantallas de marcador.</p>
+    <a-card title="Marcador TV" class="settings-card">
+      <p class="card-hint">
+        Esquema de color en <code>/board</code> (pantalla de cancha). Live y overlay siempre usan
+        fondo negro / pastilla oscura para transmisión.
+      </p>
       <a-radio-group v-model:value="prefs.scoreboardScheme" @change="persist">
         <a-radio-button value="dark">Negro (texto blanco)</a-radio-button>
         <a-radio-button value="light">Blanco (texto negro)</a-radio-button>

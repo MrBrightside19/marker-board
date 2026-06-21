@@ -59,10 +59,7 @@
 
 <script setup lang="ts">
 import LiveSyncStatus from "../components/LiveSyncStatus.vue";
-import { useBroadcastPage } from "../composables/useBroadcastPage";
 import { useRemoteHockeyBoard } from "../composables/useRemoteHockeyBoard";
-
-useBroadcastPage("live");
 
 const {
   matchId,
@@ -121,15 +118,6 @@ const {
 
 .team-panel {
   text-align: center;
-}
-
-.team-name,
-.team-score,
-.clock,
-.meta-label,
-.meta-value,
-.status-message {
-  color: #fff;
 }
 
 .team-name {

@@ -159,6 +159,9 @@ export function useRemoteHockeyBoardCore(
   );
 
   onMounted(() => {
+    if (options?.documentTitle) {
+      document.title = options.documentTitle;
+    }
     window.addEventListener(GAME_TIME_ENDED_EVENT, onGameTimeEnded);
     document.addEventListener("visibilitychange", onVisibilityChange);
     setupPolling();

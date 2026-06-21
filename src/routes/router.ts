@@ -14,6 +14,7 @@ import Overlay from "../views/Overlay.vue";
 import TournamentCourtLive from "../views/TournamentCourtLive.vue";
 import TournamentCourtOverlay from "../views/TournamentCourtOverlay.vue";
 import Profile from "../views/Profile.vue";
+import { syncBroadcastDocumentClass } from "../utils/broadcastRoutes";
 
 const routes = [
   { path: "/", name: "home", component: Home },
@@ -44,6 +45,10 @@ const routes = [
 const router = createRouter({
   history: createWebHistory("/marker-board/"),
   routes,
+});
+
+router.beforeEach((to) => {
+  syncBroadcastDocumentClass(to.name?.toString() ?? null);
 });
 
 export default router;

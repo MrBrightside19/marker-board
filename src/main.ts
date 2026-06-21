@@ -6,10 +6,8 @@ import './style.css'
 import './assets/scss/main.scss'
 import router from './routes/router'
 import { createPinia } from 'pinia'
-import { applyUserPreferencesToDocument } from './services/userPreferencesStorage'
+import { consumeSpaRedirect } from './utils/spaRedirect'
 import { useAuthStore } from './stores/auth'
-
-applyUserPreferencesToDocument()
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -18,23 +16,17 @@ app.use(pinia)
 app.use(router)
 
 async function bootstrap() {
+  const redirectPath = consumeSpaRedirect();
+  if (redirectPath) {
+    await router.replace(redirectPath);
+  }
+
   await router.isReady();
 
   const auth = useAuthStore();
   await auth.init();
 
   app.mount('#app');
-
-  const redirectPath = sessionStorage.getItem('404-redirect');
-  if (redirectPath) {
-    sessionStorage.removeItem('404-redirect');
-    if (redirectPath !== '/') {
-      router.replace(redirectPath).catch(() => {
-        console.log('Route not found:', redirectPath);
-      });
-    }
-  }
 }
 
 void bootstrap();
-
