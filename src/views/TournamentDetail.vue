@@ -28,97 +28,12 @@
       </a-button>
     </header>
 
-    <section class="share-panel">
-      <h2>Enlace para espectadores</h2>
-      <p>
-        {{
-          tournament.visibility === "public"
-            ? "Este torneo también aparece en el inicio. Comparte este enlace para acceso directo."
-            : "Torneo privado: no aparece en el inicio. Comparte este enlace para que otros vean calendario y marcadores."
-        }}
-      </p>
-      <div class="share-row">
-        <a-input :value="publicTournamentUrl" readonly />
-        <a-button type="primary" @click="copyPublicLink">Copiar enlace</a-button>
-        <router-link :to="tournamentPublicRoute(tournament.id)">
-          <a-button>Vista espectador</a-button>
-        </router-link>
-      </div>
-    </section>
-
-    <section v-if="broadcastCourts.length" class="share-panel broadcast-panel">
-      <h2>Transmisión (URL fija por cancha)</h2>
-      <p class="broadcast-intro">
-        Usa estas URLs en OBS o en la transmisión. No cambian entre partidos: al iniciar o
-        avanzar un encuentro en <strong>Controles</strong>, el marcador se actualiza solo vía
-        Supabase.
-      </p>
-      <div v-for="court in broadcastCourts" :key="court" class="broadcast-court-block">
-        <h3 class="broadcast-court-title">Cancha {{ formatCourtLabel(court) }}</h3>
-        <p class="broadcast-label">Overlay (recomendado para OBS)</p>
-        <div class="share-row">
-          <a-input :value="overlayUrlForCourt(court)" readonly />
-          <a-button type="primary" @click="copyBroadcastUrl(overlayUrlForCourt(court), 'Overlay')">
-            Copiar
-          </a-button>
-        </div>
-        <p class="broadcast-label">Live (pantalla completa)</p>
-        <div class="share-row">
-          <a-input :value="liveUrlForCourt(court)" readonly />
-          <a-button @click="copyBroadcastUrl(liveUrlForCourt(court), 'Live')">Copiar</a-button>
-        </div>
-      </div>
-    </section>
-
-    <section class="import-panel">
-      <h2>Carga masiva de partidos</h2>
-      <p>
-        Descarga la
-        <a :href="templateUrl" download target="_blank" rel="noopener">plantilla CSV</a>,
-        complétala con <strong>local</strong>, <strong>visita</strong>,
-        <strong>tiempo_juego</strong> y <strong>cancha</strong> (número o nombre;
-        por defecto <code>1</code>). Opcional:
-        <strong>fecha_programada</strong> (<code>yyyy-MM-dd HH:mm</code>).
-      </p>
-
-      <div class="import-actions">
-        <a-button :href="templateUrl" download>Descargar plantilla CSV</a-button>
-        <a-upload
-          :before-upload="handleCsvUpload"
-          :show-upload-list="false"
-          accept=".csv,text/csv"
-        >
-          <a-button type="primary" :loading="importing">Subir CSV</a-button>
-        </a-upload>
-      </div>
-
-      <a-alert
-        v-if="importErrors.length"
-        type="warning"
-        style="margin-top: 12px"
-        :message="`Se importaron ${importedCount} partidos. ${importErrors.length} filas con error.`"
-      >
-        <template #description>
-          <ul class="error-list">
-            <li v-for="err in importErrors" :key="err.line">
-              Fila {{ err.line }}: {{ err.message }}
-            </li>
-          </ul>
-        </template>
-      </a-alert>
-    </section>
-
-    <section v-if="finishedMatchCount > 0" class="standings-section">
-      <h2>Resultados y posiciones</h2>
-      <TournamentStandingsPanel :matches="tournament.matches" :results-page-size="15" />
-    </section>
-
     <section class="matches-section">
       <h2>Partidos del torneo ({{ tournament.matches.length }})</h2>
       <p class="matches-hint">
         Usa <strong>Marcador TV</strong> y <strong>Controles</strong> para operar cada partido.
-        Para la transmisión, configura el <strong>overlay fijo</strong> de tu cancha arriba (no
-        hace falta cambiarlo entre partidos).
+        Para la transmisión, configura el <strong>overlay fijo</strong> de tu cancha en la sección
+        de enlaces (no hace falta cambiarlo entre partidos).
       </p>
 
       <a-empty v-if="tournament.matches.length === 0" description="Importa partidos con el CSV" />
@@ -160,6 +75,101 @@
           </template>
         </template>
       </a-table>
+    </section>
+
+    <section v-if="finishedMatchCount > 0" class="standings-section">
+      <h2>Resultados y posiciones</h2>
+      <TournamentStandingsPanel :matches="tournament.matches" :results-page-size="15" />
+    </section>
+
+    <section class="links-panel">
+      <div class="links-grid">
+        <div class="links-column">
+          <h2>Enlace para espectadores</h2>
+          <p>
+            {{
+              tournament.visibility === "public"
+                ? "Este torneo también aparece en el inicio. Comparte este enlace para acceso directo."
+                : "Torneo privado: no aparece en el inicio. Comparte este enlace para que otros vean calendario y marcadores."
+            }}
+          </p>
+          <div class="share-row">
+            <a-input :value="publicTournamentUrl" readonly />
+            <a-button type="primary" @click="copyPublicLink">Copiar enlace</a-button>
+            <router-link :to="tournamentPublicRoute(tournament.id)">
+              <a-button>Vista espectador</a-button>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="links-column links-column--broadcast">
+          <h2>Transmisión (URL fija por cancha)</h2>
+          <p class="broadcast-intro">
+            Usa estas URLs en OBS o en la transmisión. No cambian entre partidos: al iniciar o
+            avanzar un encuentro en <strong>Controles</strong>, el marcador se actualiza solo vía
+            Supabase.
+          </p>
+          <p v-if="!broadcastCourts.length" class="broadcast-empty">
+            Importa partidos con cancha asignada para generar los enlaces de overlay y live.
+          </p>
+          <div v-for="court in broadcastCourts" :key="court" class="broadcast-court-block">
+            <h3 class="broadcast-court-title">Cancha {{ formatCourtLabel(court) }}</h3>
+            <p class="broadcast-label">Overlay (recomendado para OBS)</p>
+            <div class="share-row">
+              <a-input :value="overlayUrlForCourt(court)" readonly />
+              <a-button
+                type="primary"
+                @click="copyBroadcastUrl(overlayUrlForCourt(court), 'Overlay')"
+              >
+                Copiar
+              </a-button>
+            </div>
+            <p class="broadcast-label">Live (pantalla completa)</p>
+            <div class="share-row">
+              <a-input :value="liveUrlForCourt(court)" readonly />
+              <a-button @click="copyBroadcastUrl(liveUrlForCourt(court), 'Live')">Copiar</a-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="import-panel">
+      <h2>Carga masiva de partidos</h2>
+      <p>
+        Descarga la
+        <a :href="templateUrl" download target="_blank" rel="noopener">plantilla CSV</a>,
+        complétala con <strong>local</strong>, <strong>visita</strong>,
+        <strong>tiempo_juego</strong> y <strong>cancha</strong> (número o nombre;
+        por defecto <code>1</code>). Opcional:
+        <strong>fecha_programada</strong> (<code>yyyy-MM-dd HH:mm</code>).
+      </p>
+
+      <div class="import-actions">
+        <a-button :href="templateUrl" download>Descargar plantilla CSV</a-button>
+        <a-upload
+          :before-upload="handleCsvUpload"
+          :show-upload-list="false"
+          accept=".csv,text/csv"
+        >
+          <a-button type="primary" :loading="importing">Subir CSV</a-button>
+        </a-upload>
+      </div>
+
+      <a-alert
+        v-if="importErrors.length"
+        type="warning"
+        style="margin-top: 12px"
+        :message="`Se importaron ${importedCount} partidos. ${importErrors.length} filas con error.`"
+      >
+        <template #description>
+          <ul class="error-list">
+            <li v-for="err in importErrors" :key="err.line">
+              Fila {{ err.line }}: {{ err.message }}
+            </li>
+          </ul>
+        </template>
+      </a-alert>
     </section>
   </div>
 
@@ -491,8 +501,8 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.share-panel,
 .import-panel,
+.links-panel,
 .standings-section,
 .matches-section {
   background: #141414;
@@ -502,10 +512,50 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 
+.links-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.links-column h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.links-column p {
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 16px;
+}
+
+.links-column--broadcast {
+  padding-left: 24px;
+  border-left: 1px solid #303030;
+}
+
+@media (max-width: 900px) {
+  .links-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .links-column--broadcast {
+    padding-left: 0;
+    padding-top: 24px;
+    border-left: none;
+    border-top: 1px solid #303030;
+  }
+}
+
 .broadcast-intro {
   margin: 0 0 16px;
   color: rgba(255, 255, 255, 0.65);
   line-height: 1.5;
+}
+
+.broadcast-empty {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .broadcast-court-block {
@@ -531,7 +581,6 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.55);
 }
 
-.share-panel h2,
 .import-panel h2,
 .standings-section h2,
 .matches-section h2 {
@@ -545,7 +594,6 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.55);
 }
 
-.share-panel p,
 .import-panel p {
   color: rgba(255, 255, 255, 0.65);
   margin-bottom: 16px;
